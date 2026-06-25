@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 
 const AdminSelect = styled.select`
   padding: 8px 12px;
@@ -31,6 +31,7 @@ const SectionTitle = styled.h2`
 const OrdersSection = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [orders, setOrders] = useState([]);
+  // eslint-disable-next-line
   const [users, setUsers] = useState([]);
 
   const fetchOrders = async () => {
@@ -47,6 +48,7 @@ const OrdersSection = () => {
 
   useEffect(() => {
     fetchOrders();
+    // eslint-disable-next-line
   }, []);
 
   const handleStatusChange = async (id, status) => {

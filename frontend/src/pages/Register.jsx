@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {toast, Toaster} from "react-hot-toast";
 
 import styled from 'styled-components';
-
+const API_URL = process.env.REACT_APP_API_URL;
 // Styled Components
 const RegisterContainer = styled.div`
   display: flex;
@@ -182,7 +182,7 @@ const Register = () => {
     }
 
     try {
-      const res = await axios.post('http://localhost:8000/api/register/', form);
+      const res = await axios.post(`${API_URL}/api/register/`, form);
       if (res.status === 201) {
         toast.success('✅Registration successful! Redirecting to login...', {
           position: "top-center",

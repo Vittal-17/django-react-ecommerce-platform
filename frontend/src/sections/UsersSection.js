@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 
 const AdminSelect = styled.select`
   width: 100%;
@@ -58,7 +58,7 @@ const UsersSection = () => {
 
   useEffect(() => {
     axiosInstance.get('/api/users/').then(res => setUsers(res.data)).catch(() => setUsers([]));
-  }, []);
+  }, [axiosInstance]);
 
   const handleDelete = async (id) => {
     try {

@@ -2,6 +2,8 @@ import { createContext, useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -23,7 +25,7 @@ export const AuthProvider = ({ children }) => {
 
   const loginUser = async (email, password, remember = false) => {
     try {
-      const res = await axios.post('http://localhost:8000/api/token/', {
+      const res = await axios.post(`${API_URL}/api/token/`, {
         email,
         password,
       });
@@ -51,7 +53,7 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.clear();
   };
 
-  const axiosInstance = axios.create({ baseURL: 'http://localhost:8000' });
+  const axiosInstance = axios.create({ baseURL: API_URL });
 
   axiosInstance.interceptors.request.use(async config => {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -63,7 +65,7 @@ export const AuthProvider = ({ children }) => {
 
       if (isExpired && refresh) {
         try {
-          const response = await axios.post('http://localhost:8000/api/token/refresh/', { refresh });
+          const response = await axios.post(`${API_URL}/api/token/refresh/`, { refresh });
           if (response.status === 200) {
             storage.setItem('access', response.data.access);
             config.headers.Authorization = `Bearer ${response.data.access}`;

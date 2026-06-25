@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 
 const AdminInput = styled.input`
   width: 100%;
@@ -74,6 +74,7 @@ const CategoriesSection = () => {
 
   useEffect(() => {
     fetchCategories();
+    // eslint-disable-next-line
   }, []);
 
   const handleSubmit = async () => {

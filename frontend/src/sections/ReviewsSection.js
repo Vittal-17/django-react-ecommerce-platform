@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { FaStar } from 'react-icons/fa';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 
 const DeleteButton = styled(motion.button)`
   padding: 12px 20px;
@@ -62,6 +62,7 @@ const ReviewsSection = () => {
 
   useEffect(() => {
     fetchReviews();
+    // eslint-disable-next-line
   }, []);
 
   const handleDelete = async (id) => {

@@ -2,7 +2,7 @@ import { useEffect, useState, useContext } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 
 const AdminInput = styled.input`
   width: 100%;
@@ -113,7 +113,7 @@ const ProductsSection = () => {
   useEffect(() => {
     axiosInstance.get('/api/products/').then(res => setProducts(res.data)).catch(() => setProducts([]));
     axiosInstance.get('/api/categories/').then(res => setCategories(res.data)).catch(() => setCategories([]));
-  }, []);
+  }, [axiosInstance]);
 
   const handleSubmit = async () => {
     try {
