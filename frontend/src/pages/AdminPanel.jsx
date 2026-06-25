@@ -1,0 +1,175 @@
+import { useContext, useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import styled from 'styled-components';
+import toast, { Toaster } from "react-hot-toast";
+import AuthContext from '../context/AuthContext';
+
+import ProductsSection from '../sections/ProductsSection';
+import CategoriesSection from '../sections/CategoriesSection';
+import UsersSection from '../sections/UsersSection';
+import OrdersSection from '../sections/OrdersSection';
+import ReviewsSection from '../sections/ReviewsSection';
+
+const AdminContainer = styled.div`
+  padding: 2rem;
+  max-width: 1200px;
+  margin: auto;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+`;
+
+const NavTabs = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+`;
+
+const TabButton = styled(motion.button)`
+  padding: 10px 20px;
+  background: ${({ $active }) => ($active ? '#2e7d32' : '#4CAF50')};
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    background: ${({ $active }) => ($active ? '#256029' : '#45a049')};
+    transform: translateY(-2px);
+  }
+`;
+
+const SectionWrapper = styled(motion.div)`
+  width: 100%;
+`;
+
+const AdminPanel = () => {
+  const { axiosInstance } = useContext(AuthContext);
+  const [users, setUsers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [activeSection, setActiveSection] = useState('products');
+
+  const fetchData = async () => {
+    try {
+      const [usersRes, productsRes, categoriesRes, reviewsRes, ordersRes] = await Promise.all([
+        axiosInstance.get('/api/users/'),
+        axiosInstance.get('/api/products/'),
+        axiosInstance.get('/api/categories/'),
+        axiosInstance.get('/api/reviews/'),
+        axiosInstance.get('/api/orders/')
+      ]);
+
+      setUsers(usersRes.data);
+      setProducts(productsRes.data);
+      setCategories(categoriesRes.data);
+      setReviews(reviewsRes.data);
+      setOrders(ordersRes.data.map(order => ({
+        ...order,
+        username: usersRes.data.find(u => u.id === order.user)?.username || 'Unknown'
+      })));
+    } catch (err) {
+      console.error('Failed to load admin data', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return (
+    <AdminContainer>
+      <Toaster
+  position="top-right"
+  toastOptions={{
+    duration: 3000,
+  }}
+/>
+
+      <motion.h1 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ textAlign: 'center', marginBottom: '2rem', color: '#2c3e50' }}
+      >
+        🛠️ Admin Dashboard
+      </motion.h1>
+
+      <NavTabs>
+        <TabButton onClick={() => setActiveSection('products')} $active={activeSection === 'products'}>Products</TabButton>
+        <TabButton onClick={() => setActiveSection('categories')} $active={activeSection === 'categories'}>Categories</TabButton>
+        <TabButton onClick={() => setActiveSection('users')} $active={activeSection === 'users'}>Users</TabButton>
+        <TabButton onClick={() => setActiveSection('orders')} $active={activeSection === 'orders'}>Orders</TabButton>
+        <TabButton onClick={() => setActiveSection('reviews')} $active={activeSection === 'reviews'}>Reviews</TabButton>
+      </NavTabs>
+
+      <AnimatePresence mode="wait">
+        {activeSection === 'products' && (
+          <SectionWrapper
+            key="products"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <ProductsSection />
+          </SectionWrapper>
+        )}
+
+        {activeSection === 'categories' && (
+          <SectionWrapper
+            key="categories"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <CategoriesSection />
+          </SectionWrapper>
+        )}
+
+        {activeSection === 'users' && (
+          <SectionWrapper
+            key="users"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <UsersSection users={users} refetch={fetchData} />
+          </SectionWrapper>
+        )}
+
+        {activeSection === 'orders' && (
+          <SectionWrapper
+            key="orders"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <OrdersSection orders={orders} refetch={fetchData} />
+          </SectionWrapper>
+        )}
+
+        {activeSection === 'reviews' && (
+          <SectionWrapper
+            key="reviews"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <ReviewsSection reviews={reviews} users={users} products={products} refetch={fetchData} />
+          </SectionWrapper>
+        )}
+      </AnimatePresence>
+    </AdminContainer>
+  );
+};
+
+export default AdminPanel;

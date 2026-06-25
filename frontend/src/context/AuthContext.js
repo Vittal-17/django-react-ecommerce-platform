@@ -1,0 +1,89 @@
+import { createContext, useEffect, useState } from 'react';
+import { jwtDecode } from 'jwt-decode';
+import axios from 'axios';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [authTokens, setAuthTokens] = useState(null);
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('remember') === 'true');
+
+  useEffect(() => {
+    const storage = rememberMe ? localStorage : sessionStorage;
+    const token = storage.getItem('access');
+    const refresh = storage.getItem('refresh');
+    const storedUser = storage.getItem('user');
+
+    if (token && storedUser) {
+      setUser(JSON.parse(storedUser));
+      setAuthTokens({ access: token, refresh });
+    }
+  }, [rememberMe]);
+
+  const loginUser = async (email, password, remember = false) => {
+    try {
+      const res = await axios.post('http://localhost:8000/api/token/', {
+        email,
+        password,
+      });
+      if (res.status === 200) {
+        const storage = remember ? localStorage : sessionStorage;
+        storage.setItem('access', res.data.access);
+        storage.setItem('refresh', res.data.refresh);
+        storage.setItem('user', JSON.stringify(res.data.user));
+        localStorage.setItem('remember', remember);
+        setRememberMe(remember);
+        setAuthTokens(res.data);
+        setUser(res.data.user);
+        return true;
+      }
+    } catch (err) {
+      console.error('Login failed:', err.response?.data || err.message);
+    }
+    return false;
+  };
+
+  const logoutUser = () => {
+    setUser(null);
+    setAuthTokens(null);
+    localStorage.clear();
+    sessionStorage.clear();
+  };
+
+  const axiosInstance = axios.create({ baseURL: 'http://localhost:8000' });
+
+  axiosInstance.interceptors.request.use(async config => {
+    const storage = rememberMe ? localStorage : sessionStorage;
+    const access = storage.getItem('access');
+    const refresh = storage.getItem('refresh');
+    if (access) {
+      const decoded = jwtDecode(access);
+      const isExpired = decoded.exp * 1000 < Date.now();
+
+      if (isExpired && refresh) {
+        try {
+          const response = await axios.post('http://localhost:8000/api/token/refresh/', { refresh });
+          if (response.status === 200) {
+            storage.setItem('access', response.data.access);
+            config.headers.Authorization = `Bearer ${response.data.access}`;
+          }
+        } catch (refreshErr) {
+          console.error('Token refresh failed:', refreshErr);
+          logoutUser();
+        }
+      } else {
+        config.headers.Authorization = `Bearer ${access}`;
+      }
+    }
+    return config;
+  });
+
+  return (
+    <AuthContext.Provider value={{ user, authTokens, loginUser, logoutUser, axiosInstance, rememberMe, setRememberMe }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export default AuthContext;

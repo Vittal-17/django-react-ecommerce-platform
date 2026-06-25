@@ -1,0 +1,122 @@
+/* src/styles/animations.css */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-5px); }
+    100% { transform: translateY(0px); }
+  }
+  
+  @keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  .animate-fadeIn {
+    animation: fadeIn 0.8s ease-out forwards;
+  }
+  
+  .animate-slideUp {
+    animation: slideUp 0.6s ease-out forwards;
+  }
+  
+  .animate-pulse {
+    animation: pulse 2s infinite ease-in-out;
+  }
+  
+  .animate-float {
+    animation: float 3s infinite ease-in-out;
+  }
+  
+  .gradient-animation {
+    background-size: 200% 200%;
+    animation: gradientBG 8s ease infinite;
+  }
+  
+  .hover-grow {
+    transition: transform 0.3s ease;
+  }
+  
+  .hover-grow:hover {
+    transform: scale(1.05);
+  }
+  
+  .navbar-glow {
+    box-shadow: 0 0 15px rgba(100, 150, 255, 0.6);
+  }
+  
+  .button-glow {
+    box-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+  }
+  
+  .button-glow:hover {
+    box-shadow: 0 0 20px rgba(100, 150, 255, 0.8);
+  }
+  
+  .dropdown-enter {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  
+  .dropdown-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: all 0.3s ease;
+  }
+  
+  .dropdown-exit {
+    opacity: 1;
+  }
+  
+  .dropdown-exit-active {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+  }
+
+  /* Add these to your existing animations.css */
+.transform-origin-top {
+    transform-origin: top;
+  }
+  
+  .scale-y-95 {
+    transform: scaleY(0.95);
+  }
+  
+  .scale-y-100 {
+    transform: scaleY(1);
+  }
+  
+  .pointer-events-none {
+    pointer-events: none;
+  }
+
+  /* Ensure full width for the main container */
+.min-h-screen {
+    width: 100%;
+  }
+  
+  /* Center the text elements */
+  .text-center {
+    text-align: center;
+  }
+  
+  /* Center the grid content */
+  .grid {
+    place-items: center;
+  }
