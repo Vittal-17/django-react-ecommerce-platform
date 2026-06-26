@@ -5,8 +5,9 @@ import AuthContext from '../context/AuthContext';
 // ==========================================
 // DEBOUNCED QUANTITY CONTROLLER COMPONENT
 // ==========================================
-const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) => {
+const CartQuantityController = ({ itemId, initialQuantity, stockLimit, onQuantityUpdate }) => {
   const [localQuantity, setLocalQuantity] = useState(initialQuantity);
+  const isAtLimit = localQuantity >= stockLimit;
 
   useEffect(() => {
     setLocalQuantity(initialQuantity);
@@ -16,15 +17,17 @@ const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) =
     if (localQuantity === initialQuantity) return;
 
     const delayDebounceFn = setTimeout(() => {
-      if (localQuantity > 0) {
+      if (localQuantity > 0 && localQuantity <= stockLimit) {
         onQuantityUpdate(itemId, localQuantity);
       }
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [localQuantity, itemId, initialQuantity, onQuantityUpdate]);
+  }, [localQuantity, itemId, initialQuantity, onQuantityUpdate, stockLimit]);
 
-  const handleIncrement = () => setLocalQuantity(prev => Number(prev) + 1);
+  const handleIncrement = () => {
+    if (!isAtLimit) setLocalQuantity(prev => Number(prev) + 1);
+  };
   const handleDecrement = () => setLocalQuantity(prev => (prev > 1 ? prev - 1 : 1));
 
   const handleManualInput = (e) => {
@@ -35,7 +38,7 @@ const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) =
     }
     const parsed = parseInt(val, 10);
     if (!isNaN(parsed) && parsed > 0) {
-      setLocalQuantity(parsed);
+      setLocalQuantity(Math.min(parsed, stockLimit));
     }
   };
 
@@ -53,7 +56,6 @@ const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) =
         disabled={localQuantity <= 1}
         style={{
           ...baseBtnStyle,
-          // Faded red when disabled, bold red when active
           background: localQuantity <= 1 ? '#ffb3b3' : '#ff4d4d',
           cursor: localQuantity <= 1 ? 'not-allowed' : 'pointer'
         }}
@@ -74,12 +76,13 @@ const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) =
       <button 
         type="button"
         onClick={handleIncrement}
+        disabled={isAtLimit}
         style={{
           ...baseBtnStyle,
-          // Matches the #4caf50 green of your checkout button
-          background: '#4caf50' 
+          background: isAtLimit ? '#a5d6a7' : '#4caf50',
+          cursor: isAtLimit ? 'not-allowed' : 'pointer'
         }}
-        title="Increase quantity"
+        title={isAtLimit ? "Out of stock" : "Increase quantity"}
       >
         ➕
       </button>
@@ -87,20 +90,7 @@ const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) =
   );
 };
 
-// Quick styles for the new touch targets
-const btnStyle = {
-  background: '#e0e0e0',
-  border: 'none',
-  padding: '0.4rem 0.6rem',
-  borderRadius: '4px',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  userSelect: 'none'
-};
-
+// Quick styles
 const baseBtnStyle = {
   border: 'none',
   padding: '0.4rem 0.6rem',
@@ -110,7 +100,7 @@ const baseBtnStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   userSelect: 'none',
-  color: 'white', // Ensures the emoji/text pops against the colors
+  color: 'white',
   transition: 'background 0.2s ease'
 };
 
@@ -140,13 +130,11 @@ const Cart = () => {
     setTimeout(() => setToast(null), 2000);
   };
 
-  // Fetch cart items from API
   const fetchCartItems = async () => {
     setLoading(true);
     try {
       const res = await axiosInstance.get('/api/cart-items/');
       setCartItems(res.data);
-      console.log('Cart items loaded from API:', res.data);
     } catch (err) {
       console.error('Failed to load cart items:', err);
       showToast('❌ Failed to load cart items');
@@ -155,18 +143,6 @@ const Cart = () => {
     }
   };
 
-  // Add item to cart
-  const handleAddToCart = async (item) => {
-    try {
-      const res = await axiosInstance.post('/api/cart-items/', { product: item.id, quantity: 1 });
-      setCartItems(prev => [...prev, res.data]);
-    } catch (err) {
-      console.error('Failed to add to cart:', err);
-      showToast('Failed to add to cart');
-    }
-  };
-
-  // Fetch wishlist items
   const fetchWishlist = async () => {
     try {
       const res = await axiosInstance.get('/api/wishlist/');
@@ -177,19 +153,16 @@ const Cart = () => {
     }
   };
 
-  // Add item to wishlist
   const handleAddToWishlist = async (productId) => {
     if (!user) {
       showToast('Please log in to add items to wishlist');
       setTimeout(() => navigate('/login'), 2000);
       return;
     }
-
     if (wishlistIds.includes(productId)) {
       showToast('Already in wishlist');
       return;
     }
-
     try {
       await axiosInstance.post('/api/wishlist/', { product_id: productId });
       setWishlistIds(prev => [...prev, productId]);
@@ -200,19 +173,31 @@ const Cart = () => {
     }
   };
 
-  // Update quantity of cart item
   const handleQuantityChange = async (id, quantity) => {
     try {
+      // 1. Optimistic Update (Immediate UI feedback)
+      setCartItems(prevItems => 
+        prevItems.map(item => item.id === id ? { ...item, quantity } : item)
+      );
+      
+      // 2. Perform API call
       await axiosInstance.patch(`/api/cart-items/${id}/`, { quantity });
-      fetchCartItems(); // Reload data once backend finishes processing
       showToast('Quantity updated');
     } catch (err) {
       console.error('Failed to update quantity:', err);
-      showToast('Failed to update quantity');
+      
+      // 3. Universal Error Handling
+      if (err.response && err.response.status === 400) {
+        showToast('❌ No more stock available for this item');
+      } else {
+        showToast('❌ Failed to update');
+      }
+      
+      // Revert to server-side source of truth on failure
+      fetchCartItems(); 
     }
   };
 
-  // Remove item from cart
   const handleRemoveItem = async (id) => {
     if (!window.confirm('Remove this item from your cart?')) return;
     try {
@@ -225,14 +210,12 @@ const Cart = () => {
     }
   };
 
-  // Proceed to checkout
   const handleProceedToCheckout = async () => {
     if (cartItems.length === 0) return showToast('Your cart is empty');
     const cartData = JSON.stringify(cartItems);
     navigate(`/checkout/?cartData=${encodeURIComponent(cartData)}`);
   };
 
-  // Calculate total price
   const total = cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0).toFixed(2);
 
   useEffect(() => {
@@ -243,7 +226,6 @@ const Cart = () => {
   return (
     <div style={{ maxWidth: '800px', margin: 'auto', padding: '1rem' }}>
       <h1 style={{ textAlign: 'center' }}>🛒 Your Cart</h1>
-
       {toast && <div style={{ background: '#4caf50', color: 'white', padding: '0.75rem', marginBottom: '1rem', borderRadius: '8px', textAlign: 'center' }}>{toast}</div>}
 
       {loading ? (
@@ -258,44 +240,23 @@ const Cart = () => {
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {cartItems.map(item => (
                 <li key={item.id} style={{ background: '#fafafa', marginBottom: '1rem', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center' }}>
-                  <img
-                    src={item.product_image}
-                    alt={item.product_name || item.name}
-                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginRight: '1rem' }}
-                  />
+                  <img src={item.product_image} alt={item.product_name || item.name} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginRight: '1rem' }} />
                   <div style={{ flexGrow: 1 }}>
                     <strong>{item.product_name || item.name}</strong>
                     <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      
-                      {/* INTEGRATED THE NEW UX CONTROLLER */}
                       <CartQuantityController 
                         itemId={item.id} 
                         initialQuantity={item.quantity} 
+                        stockLimit={item.product_stock || 99} 
                         onQuantityUpdate={handleQuantityChange} 
                       />
-                      
                       <span>× ${Number(item.price).toFixed(2)}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                     <strong>${(item.quantity * Number(item.price)).toFixed(2)}</strong>
-                    <button
-                      onClick={() => handleRemoveItem(item.id)}
-                      style={{ background: 'red', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem' }}
-                    >
-                      Remove
-                    </button>
-                    <button
-                      onClick={() => handleAddToWishlist(item.product)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: wishlistIds.includes(item.product) ? 'default' : 'pointer',
-                        fontSize: '1.5rem'
-                      }}
-                      title={wishlistIds.includes(item.product) ? 'Already in wishlist' : 'Add to wishlist'}
-                      disabled={wishlistIds.includes(item.product)}
-                    >
+                    <button onClick={() => handleRemoveItem(item.id)} style={{ background: 'red', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>Remove</button>
+                    <button onClick={() => handleAddToWishlist(item.product)} style={{ background: 'none', border: 'none', cursor: wishlistIds.includes(item.product) ? 'default' : 'pointer', fontSize: '1.5rem' }} title={wishlistIds.includes(item.product) ? 'Already in wishlist' : 'Add to wishlist'} disabled={wishlistIds.includes(item.product)}>
                       {wishlistIds.includes(item.product) ? '❤️' : '🤍'}
                     </button>
                   </div>
@@ -303,26 +264,11 @@ const Cart = () => {
               ))}
             </ul>
           )}
-
           <h3 style={{ textAlign: 'right', marginTop: '1rem' }}>Total: ${total}</h3>
-          <button onClick={handleProceedToCheckout} style={{ display: 'block', margin: '1rem auto', padding: '0.75rem 1.5rem', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem' }}>
-            ✅ Proceed to Checkout
-          </button>
+          <button onClick={handleProceedToCheckout} style={{ display: 'block', margin: '1rem auto', padding: '0.75rem 1.5rem', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem' }}>✅ Proceed to Checkout</button>
         </>
       )}
-
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        /* Hides default native spinner arrows in Chrome, Safari, Edge, Opera */
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-      `}</style>
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }`}</style>
     </div>
   );
 };
