@@ -1,7 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import *
 from rest_framework_simplejwt.views import TokenRefreshView
+from .views import (
+    UserViewSet, CategoryViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet,
+    ReviewViewSet, WishlistViewSet, CouponViewSet, PaymentViewSet, AdminLogViewSet,
+    CartViewSet, CartItemViewSet, RegisterView, CustomTokenObtainPairView
+)
 
 # Public API router
 router = DefaultRouter()

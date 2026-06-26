@@ -2,6 +2,131 @@ import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 
+// ==========================================
+// DEBOUNCED QUANTITY CONTROLLER COMPONENT
+// ==========================================
+const CartQuantityController = ({ itemId, initialQuantity, onQuantityUpdate }) => {
+  const [localQuantity, setLocalQuantity] = useState(initialQuantity);
+
+  useEffect(() => {
+    setLocalQuantity(initialQuantity);
+  }, [initialQuantity]);
+
+  useEffect(() => {
+    if (localQuantity === initialQuantity) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      if (localQuantity > 0) {
+        onQuantityUpdate(itemId, localQuantity);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [localQuantity, itemId, initialQuantity, onQuantityUpdate]);
+
+  const handleIncrement = () => setLocalQuantity(prev => Number(prev) + 1);
+  const handleDecrement = () => setLocalQuantity(prev => (prev > 1 ? prev - 1 : 1));
+
+  const handleManualInput = (e) => {
+    const val = e.target.value;
+    if (val === '') {
+      setLocalQuantity(''); 
+      return;
+    }
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      setLocalQuantity(parsed);
+    }
+  };
+
+  const handleBlur = () => {
+    if (localQuantity === '' || localQuantity < 1) {
+      setLocalQuantity(initialQuantity); 
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <button 
+        type="button"
+        onClick={handleDecrement}
+        disabled={localQuantity <= 1}
+        style={{
+          ...baseBtnStyle,
+          // Faded red when disabled, bold red when active
+          background: localQuantity <= 1 ? '#ffb3b3' : '#ff4d4d',
+          cursor: localQuantity <= 1 ? 'not-allowed' : 'pointer'
+        }}
+        title="Decrease quantity"
+      >
+        ➖
+      </button>
+      
+      <input
+        type="number"
+        min="1"
+        value={localQuantity}
+        onChange={handleManualInput}
+        onBlur={handleBlur}
+        style={inputStyle}
+      />
+      
+      <button 
+        type="button"
+        onClick={handleIncrement}
+        style={{
+          ...baseBtnStyle,
+          // Matches the #4caf50 green of your checkout button
+          background: '#4caf50' 
+        }}
+        title="Increase quantity"
+      >
+        ➕
+      </button>
+    </div>
+  );
+};
+
+// Quick styles for the new touch targets
+const btnStyle = {
+  background: '#e0e0e0',
+  border: 'none',
+  padding: '0.4rem 0.6rem',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontSize: '0.8rem',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  userSelect: 'none'
+};
+
+const baseBtnStyle = {
+  border: 'none',
+  padding: '0.4rem 0.6rem',
+  borderRadius: '4px',
+  fontSize: '0.8rem',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  userSelect: 'none',
+  color: 'white', // Ensures the emoji/text pops against the colors
+  transition: 'background 0.2s ease'
+};
+
+const inputStyle = {
+  width: '50px', 
+  textAlign: 'center', 
+  padding: '0.25rem',
+  border: '1px solid #ccc',
+  borderRadius: '4px',
+  fontWeight: 'bold',
+  MozAppearance: 'textfield'
+};
+
+// ==========================================
+// MAIN CART COMPONENT
+// ==========================================
 const Cart = () => {
   const { axiosInstance, user } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -21,7 +146,7 @@ const Cart = () => {
     try {
       const res = await axiosInstance.get('/api/cart-items/');
       setCartItems(res.data);
-      console.log('Cart items loaded from API:', res.data); // Debugging log
+      console.log('Cart items loaded from API:', res.data);
     } catch (err) {
       console.error('Failed to load cart items:', err);
       showToast('❌ Failed to load cart items');
@@ -35,7 +160,6 @@ const Cart = () => {
     try {
       const res = await axiosInstance.post('/api/cart-items/', { product: item.id, quantity: 1 });
       setCartItems(prev => [...prev, res.data]);
-      console.log('Item added to cart:', res.data); // Debugging log
     } catch (err) {
       console.error('Failed to add to cart:', err);
       showToast('Failed to add to cart');
@@ -67,7 +191,7 @@ const Cart = () => {
     }
 
     try {
-      await axiosInstance.post('/api/wishlist/', { product_id: productId }); // Corrected the field name
+      await axiosInstance.post('/api/wishlist/', { product_id: productId });
       setWishlistIds(prev => [...prev, productId]);
       showToast('Added to wishlist ❤️');
     } catch (err) {
@@ -80,7 +204,7 @@ const Cart = () => {
   const handleQuantityChange = async (id, quantity) => {
     try {
       await axiosInstance.patch(`/api/cart-items/${id}/`, { quantity });
-      fetchCartItems(); // Reload cart after updating quantity
+      fetchCartItems(); // Reload data once backend finishes processing
       showToast('Quantity updated');
     } catch (err) {
       console.error('Failed to update quantity:', err);
@@ -93,7 +217,7 @@ const Cart = () => {
     if (!window.confirm('Remove this item from your cart?')) return;
     try {
       await axiosInstance.delete(`/api/cart-items/${id}/`);
-      fetchCartItems(); // Reload cart after removing item
+      fetchCartItems();
       showToast('Item removed from cart');
     } catch (err) {
       console.error('Failed to remove item:', err);
@@ -104,15 +228,13 @@ const Cart = () => {
   // Proceed to checkout
   const handleProceedToCheckout = async () => {
     if (cartItems.length === 0) return showToast('Your cart is empty');
-
-    const cartData = JSON.stringify(cartItems); // Converting to string to pass as query parameter
+    const cartData = JSON.stringify(cartItems);
     navigate(`/checkout/?cartData=${encodeURIComponent(cartData)}`);
   };
 
   // Calculate total price
   const total = cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0).toFixed(2);
 
-  // Fetch cart data and wishlist on mount
   useEffect(() => {
     fetchCartItems();
     fetchWishlist();
@@ -143,15 +265,16 @@ const Cart = () => {
                   />
                   <div style={{ flexGrow: 1 }}>
                     <strong>{item.product_name || item.name}</strong>
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value))}
-                        style={{ width: '60px', marginRight: '8px', padding: '0.25rem' }}
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      
+                      {/* INTEGRATED THE NEW UX CONTROLLER */}
+                      <CartQuantityController 
+                        itemId={item.id} 
+                        initialQuantity={item.quantity} 
+                        onQuantityUpdate={handleQuantityChange} 
                       />
-                      × ${Number(item.price).toFixed(2)}
+                      
+                      <span>× ${Number(item.price).toFixed(2)}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
@@ -192,6 +315,12 @@ const Cart = () => {
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        /* Hides default native spinner arrows in Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
       `}</style>
     </div>

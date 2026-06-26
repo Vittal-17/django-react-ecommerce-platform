@@ -11,21 +11,20 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import { useForm } from 'react-hook-form';
-import {toast, Toaster} from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 
 const Navbar = () => {
   const { user, logoutUser, axiosInstance } = useContext(AuthContext);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  // Replaced 'isEditing' with a multi-state to handle the separate forms
+  const [editMode, setEditMode] = useState('none'); // 'none' | 'profile' | 'password'
   const [isLoading, setIsLoading] = useState(false);
   const [userDetails, setUserDetails] = useState(null);
   const navigate = useNavigate();
 
-  const { register, handleSubmit, reset, setValue } = useForm({
+  const { register, handleSubmit, reset } = useForm({
     defaultValues: {
-      username: user?.username || '',
-      email: user?.email || '',
       address: user?.address || '',
       phone: user?.phone || '',
       current_password: '',
@@ -48,19 +47,17 @@ const Navbar = () => {
   }, [isDropdownOpen, user]);
 
   useEffect(() => {
-  if (user) {
-    setIsDropdownOpen(false);
-    setIsEditing(false);
-  }
-}, [user]);
+    if (user) {
+      setIsDropdownOpen(false);
+      setEditMode('none');
+    }
+  }, [user]);
 
   const fetchUserDetails = async () => {
     try {
       const response = await axiosInstance.get(`/api/users/${user.id}/`);
       setUserDetails(response.data);
       reset({
-        username: response.data.username,
-        email: response.data.email,
         address: response.data.address || '',
         phone: response.data.phone || '',
         current_password: '',
@@ -73,63 +70,69 @@ const Navbar = () => {
   };
 
   const toggleDropdown = () => {
-  console.log("toggleDropdown called");
+    setIsDropdownOpen(!isDropdownOpen);
+    if (!isDropdownOpen && editMode === 'none') {
+      reset({
+        address: user?.address || '',
+        phone: user?.phone || '',
+        current_password: '',
+        new_password: ''
+      });
+    }
+  };
 
-  setIsDropdownOpen(!isDropdownOpen);
-
-  if (!isDropdownOpen && !isEditing) {
-    reset({
-      username: user?.username || '',
-      email: user?.email || '',
-      address: user?.address || '',
-      phone: user?.phone || '',
-      current_password: '',
-      new_password: ''
-    });
-  }
-};
+  // --- Handlers for the Decoupled APIs ---
 
   const handleUpdateProfile = async (data) => {
     setIsLoading(true);
     try {
-      await axiosInstance.patch(`/api/users/${user.id}/`, data);
-      toast.success('👤 Profile updated successfully!', {
-        position: "bottom-right",
-        duration: 2000,
+      // Send ONLY the permitted fields to the update endpoint
+      await axiosInstance.patch(`/api/users/${user.id}/`, {
+        address: data.address,
+        phone: data.phone
       });
-      setIsEditing(false);
+      toast.success('👤 Profile updated successfully!');
+      setEditMode('none');
       await fetchUserDetails();
     } catch (error) {
       const err = error.response?.data || 'Update failed';
-      toast.error(
-        typeof err === 'object' ? Object.values(err).flat().join(' ') : err,
-        { position: "bottom-right", duration: 2000 }
-      );
+      toast.error(typeof err === 'object' ? Object.values(err).flat().join(' ') : err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (data) => {
+    setIsLoading(true);
+    try {
+      // Hit the new custom endpoint strictly for passwords
+      await axiosInstance.put(`/api/users/change-password/`, {
+        current_password: data.current_password,
+        new_password: data.new_password
+      });
+      toast.success('🔒 Password updated successfully!');
+      setEditMode('none');
+      // Clear password fields from the form memory after success
+      reset(prev => ({ ...prev, current_password: '', new_password: '' })); 
+    } catch (error) {
+      const err = error.response?.data || 'Password update failed';
+      toast.error(typeof err === 'object' ? Object.values(err).flat().join(' ') : err);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = () => {
-  toast.success("🔒 Logged out successfully!", {
-    position: "bottom-right",
-    duration: 2000,
-  });
-
-  setTimeout(() => {
-    logoutUser();
-    navigate("/")
-  }, 1000);
-};
+    toast.success("🔒 Logged out successfully!");
+    setTimeout(() => {
+      logoutUser();
+      navigate("/");
+    }, 1000);
+  };
 
   return (
     <>
-      <Toaster
-  position="bottom-right"
-  toastOptions={{
-    duration: 2000,
-  }}
-/>
+      <Toaster position="bottom-right" toastOptions={{ duration: 2000 }} />
       <NavContainer 
         $isScrolled={isScrolled}
         initial={{ y: -100 }}
@@ -163,16 +166,11 @@ const Navbar = () => {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.2 }}
                       >
-                        {isEditing ? (
+                        
+                        {/* --- VIEW 1: PROFILE DETAILS FORM --- */}
+                        {editMode === 'profile' && (
                           <EditForm onSubmit={handleSubmit(handleUpdateProfile)}>
-                            <FormGroup>
-                              <label>Username</label>
-                              <Input type="text" {...register("username", { required: true })} />
-                            </FormGroup>
-                            <FormGroup>
-                              <label>Email</label>
-                              <Input type="email" {...register("email", { required: true })} />
-                            </FormGroup>
+                            <h4 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>Edit Details</h4>
                             <FormGroup>
                               <label>Address {userDetails?.address && `(Current: ${userDetails.address})`}</label>
                               <TextArea rows="2" {...register("address")} />
@@ -181,24 +179,42 @@ const Navbar = () => {
                               <label>Phone {userDetails?.phone && `(Current: ${userDetails.phone})`}</label>
                               <Input type="tel" {...register("phone")} />
                             </FormGroup>
-                            <FormGroup>
-                              <label><FaLock /> Current Password</label>
-                              <Input type="password" {...register("current_password")} />
-                            </FormGroup>
-                            <FormGroup>
-                              <label><FaLock /> New Password</label>
-                              <Input type="password" {...register("new_password")} />
-                            </FormGroup>
                             <ButtonGroup>
                               <SaveButton type="submit" disabled={isLoading}>
                                 {isLoading ? <FaSpinner className="spin" /> : 'Save'}
                               </SaveButton>
-                              <CancelButton type="button" onClick={() => setIsEditing(false)}>
+                              <CancelButton type="button" onClick={() => setEditMode('none')}>
                                 Cancel
                               </CancelButton>
                             </ButtonGroup>
                           </EditForm>
-                        ) : (
+                        )}
+
+                        {/* --- VIEW 2: PASSWORD CHANGE FORM --- */}
+                        {editMode === 'password' && (
+                          <EditForm onSubmit={handleSubmit(handleChangePassword)}>
+                            <h4 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>Change Password</h4>
+                            <FormGroup>
+                              <label><FaLock /> Current Password</label>
+                              <Input type="password" {...register("current_password", { required: true })} />
+                            </FormGroup>
+                            <FormGroup>
+                              <label><FaLock /> New Password</label>
+                              <Input type="password" {...register("new_password", { required: true })} />
+                            </FormGroup>
+                            <ButtonGroup>
+                              <SaveButton type="submit" disabled={isLoading}>
+                                {isLoading ? <FaSpinner className="spin" /> : 'Update'}
+                              </SaveButton>
+                              <CancelButton type="button" onClick={() => setEditMode('none')}>
+                                Cancel
+                              </CancelButton>
+                            </ButtonGroup>
+                          </EditForm>
+                        )}
+
+                        {/* --- VIEW 3: STANDARD USER INFO DASHBOARD --- */}
+                        {editMode === 'none' && (
                           <>
                             <UserInfo>
                               <InfoItem><FaUser /> {userDetails?.username || user.username}</InfoItem>
@@ -210,11 +226,15 @@ const Navbar = () => {
                                 <InfoItem><FaPhone /> {userDetails?.phone || user.phone}</InfoItem>
                               )}
                             </UserInfo>
-                            <DropdownButton onClick={() => setIsEditing(true)}>
-                              <FaEdit /> Edit Profile
+                            <DropdownButton onClick={() => setEditMode('profile')}>
+                              <FaEdit /> Edit Details
+                            </DropdownButton>
+                            <DropdownButton onClick={() => setEditMode('password')}>
+                              <FaLock /> Change Password
                             </DropdownButton>
                           </>
                         )}
+
                         <DropdownDivider />
                         <LogoutButton onClick={handleLogout}>
                           <FaSignOutAlt /> Logout
@@ -233,6 +253,7 @@ const Navbar = () => {
     </>
   );
 };
+
 // Styled Components
 const NavContainer = styled(motion.nav)`
   background: ${props => props.$isScrolled ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.92)'};

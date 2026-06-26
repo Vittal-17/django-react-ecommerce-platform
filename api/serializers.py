@@ -1,6 +1,9 @@
 from rest_framework import serializers
-from .models import *
 from django.contrib.auth.password_validation import validate_password
+from .models import (
+    User, Category, Product, Cart, CartItem, Order, 
+    OrderItem, Review, Wishlist, Coupon, Payment, AdminLog
+)
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -22,13 +25,31 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = User.objects.create(
-        username=validated_data['username'],
-        email=validated_data['email']
+            username=validated_data['username'],
+            email=validated_data['email']
         )
         user.set_password(validated_data['password'])
         user.save()
         return user
 
+# --- NEW: Strictly for Profile Details ---
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'address', 'phone', 'role']
+        # Prevent users from changing restricted fields via PATCH
+        read_only_fields = ['id', 'username', 'email', 'role'] 
+
+# --- NEW: Strictly for Password Changes ---
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
+
+    def validate_current_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Incorrect current password.")
+        return value
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -49,6 +70,23 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = ['id', 'product', 'product_name', 'product_image', 'price', 'quantity']
 
+    def validate(self, data):
+        # 1. Identify the product being added (POST) or updated (PATCH)
+        product = data.get('product')
+        if not product and self.instance:
+            # If it's a PATCH request, the product might not be in the payload, so we grab it from the existing instance
+            product = self.instance.product
+
+        # 2. Identify the requested quantity (defaults to 1 for new additions)
+        quantity = data.get('quantity', 1)
+
+        # 3. The hard stop: Check against actual database stock
+        if product and quantity > product.stock:
+            raise serializers.ValidationError({
+                'quantity': f"Sorry, we only have {product.stock} of these in stock right now."
+            })
+
+        return data
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
@@ -58,16 +96,16 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'created_at', 'items']
         read_only_fields = ['id', 'user', 'created_at']
 
-
 class OrderItemSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='product.name', read_only=True)
     description = serializers.CharField(source='product.description', read_only=True)
-    image_url = serializers.CharField(source='product.image_url', read_only=True)  # <-- Corrected line
+    image_url = serializers.CharField(source='product.image_url', read_only=True)
 
     class Meta:
         model = OrderItem
         fields = ['product', 'quantity', 'price', 'name', 'description', 'image_url']
 
+from django.db import transaction # Add this to your imports at the top
 
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True)
@@ -82,26 +120,44 @@ class OrderSerializer(serializers.ModelSerializer):
         order_items_data = validated_data.pop('order_items')
         validated_data.pop('user', None)
 
-        total_price = sum(item['quantity'] * item['price'] for item in order_items_data)
+        # Open an atomic database transaction
+        with transaction.atomic():
+            total_price = 0
 
-        order = Order.objects.create(
-            user=self.context['request'].user,
-            total_price=total_price,
-            **validated_data
-        )
+            # 1. Validate stock and deduct inventory BEFORE creating the order
+            for item_data in order_items_data:
+                # select_for_update() locks this specific row so no one else can buy it during this millisecond
+                product = Product.objects.select_for_update().get(id=item_data['product'].id)
+                
+                requested_qty = item_data['quantity']
 
-        for item_data in order_items_data:
-            OrderItem.objects.create(order=order, **item_data)
+                if requested_qty > product.stock:
+                    raise serializers.ValidationError(
+                        f"Checkout failed: '{product.name}' only has {product.stock} units left."
+                    )
+                
+                # Calculate running total
+                total_price += requested_qty * item_data['price']
+                
+                # Deduct from the locked inventory and save
+                product.stock -= requested_qty
+                product.save()
 
-        CartItem.objects.filter(cart__user=self.context['request'].user).delete()
+            # 2. Create the Order
+            order = Order.objects.create(
+                user=self.context['request'].user,
+                total_price=total_price,
+                **validated_data
+            )
+
+            # 3. Create the Order Items
+            for item_data in order_items_data:
+                OrderItem.objects.create(order=order, **item_data)
+
+            # 4. Clear the user's cart
+            CartItem.objects.filter(cart__user=self.context['request'].user).delete()
 
         return order
-
-
-
-
-from rest_framework import serializers
-from .models import Review
 
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
@@ -111,12 +167,10 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'rating', 'comment', 'created_at', 'username']
         read_only_fields = ['user']
 
-
-
 class WishlistSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-    queryset=Product.objects.all(), source='product', write_only=True
+        queryset=Product.objects.all(), source='product', write_only=True
     )
 
     class Meta:
@@ -138,27 +192,3 @@ class AdminLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdminLog
         fields = '__all__'
-
-from django.contrib.auth.hashers import check_password
-
-class UserUpdateSerializer(serializers.ModelSerializer):
-    current_password = serializers.CharField(write_only=True, required=False)
-    new_password = serializers.CharField(write_only=True, required=False)
-
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'address', 'phone', 'role', 'current_password', 'new_password']
-        # Added 'role' to the fields list ^
-
-    def update(self, instance, validated_data):
-        current_password = validated_data.pop('current_password', None)
-        new_password = validated_data.pop('new_password', None)
-
-        if current_password and new_password:
-            if not instance.check_password(current_password):
-                raise serializers.ValidationError({'current_password': 'Incorrect current password.'})
-            instance.set_password(new_password)
-            instance.save()
-
-        return super().update(instance, validated_data)
-    

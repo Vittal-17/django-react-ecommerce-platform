@@ -158,6 +158,11 @@ const WishlistCard = styled(motion.div)`
 const ImageWrapper = styled.div`
   width: 100%;
   height: 200px;
+  background: #ffffff; /* Added white background to match products page */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px; /* Added padding so the image doesn't touch the edges */
   overflow: hidden;
   border-radius: 12px;
   margin-bottom: 1rem;
@@ -165,7 +170,7 @@ const ImageWrapper = styled.div`
   img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain; /* Changed from 'cover' to 'contain' */
   }
 `;
 

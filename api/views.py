@@ -1,35 +1,36 @@
-from rest_framework import viewsets, permissions, generics
-from .models import *
-from .serializers import *
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from rest_framework.decorators import action
+from rest_framework import viewsets, generics, status
 from rest_framework.response import Response
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User
-from rest_framework.permissions import AllowAny
-from rest_framework.viewsets import ModelViewSet
-from .models import Review
-from .serializers import ReviewSerializer
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner
 
-from .permissions import IsOwnerOrAdmin  # make sure path is correct
-
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+# Consolidated Model & Serializer Imports
+from .models import (
+    User, Category, Product, Order, OrderItem, Review, 
+    Wishlist, Cart, CartItem, Coupon, Payment, AdminLog
+)
+from .serializers import (
+    UserSerializer, RegisterSerializer, UserProfileUpdateSerializer, ChangePasswordSerializer,
+    CategorySerializer, ProductSerializer, OrderSerializer, OrderItemSerializer,
+    ReviewSerializer, WishlistSerializer, CartSerializer, CartItemSerializer,
+    CouponSerializer, PaymentSerializer, AdminLogSerializer
+)
+from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     lookup_field = 'id'
 
     def get_serializer_class(self):
+        # Dynamically route serializers based on the request
         if self.action in ['update', 'partial_update']:
-            return UserUpdateSerializer
+            return UserProfileUpdateSerializer
+        if self.action == 'change_password':
+            return ChangePasswordSerializer
         return UserSerializer
 
     @action(detail=False, methods=['get'], url_path='me', permission_classes=[IsAuthenticated])
@@ -37,21 +38,28 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
+    # NEW: Endpoint for changing password (maps to /api/users/change-password/)
+    @action(detail=False, methods=['put'], url_path='change-password', permission_classes=[IsAuthenticated])
+    def change_password(self, request):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        user = request.user
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+        
+        return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
 
-from rest_framework import viewsets
-from rest_framework.permissions import AllowAny
-from .models import Category
-from .serializers import CategorySerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [AllowAny]  # 👈 Now this works
+    permission_classes = [AllowAny]
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all()
@@ -66,12 +74,6 @@ class OrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-# views.py
-
-from rest_framework import viewsets
-from .models import OrderItem
-from .serializers import OrderItemSerializer
-
 class OrderItemViewSet(viewsets.ModelViewSet):
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
@@ -83,17 +85,13 @@ class OrderItemViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(order_id=order_id)
         return queryset
 
-
-from .models import Review
-
-class ReviewViewSet(ModelViewSet):
+class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all()
     serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]  # Removed IsAdminUser
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
 
     def get_permissions(self):
         if self.action in ['destroy']:
-            # For delete operations, allow either admin or owner
             return [IsAdminOrOwner()]
         return super().get_permissions()
 
@@ -117,7 +115,6 @@ class WishlistViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
@@ -138,7 +135,6 @@ class CartItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         cart, created = Cart.objects.get_or_create(user=self.request.user)
         serializer.save(cart=cart)
-
 
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
@@ -185,7 +181,5 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             },
         }
 
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-    
