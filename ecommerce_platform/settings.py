@@ -29,9 +29,9 @@ SECRET_KEY = config("SECRET_KEY")
 DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = [
-    'django-react-ecommerce-platform.vercel.app',
-    'https://django-react-ecommerce-platform.onrender.com',
-    'localhost', 
+    '.vercel.app',
+    '.onrender.com',
+    'localhost',
     '127.0.0.1'
 ]
 
@@ -45,7 +45,6 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://django-react-ecommerce-platform.vercel.app",
 ]
-
 
 # Application definition
 
@@ -178,3 +177,6 @@ SIMPLE_JWT = {
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
