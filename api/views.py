@@ -26,7 +26,6 @@ class UserViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     def get_serializer_class(self):
-        # Dynamically route serializers based on the request
         if self.action in ['update', 'partial_update']:
             return UserProfileUpdateSerializer
         if self.action == 'change_password':
@@ -38,16 +37,13 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
-    # NEW: Endpoint for changing password (maps to /api/users/change-password/)
     @action(detail=False, methods=['put'], url_path='change-password', permission_classes=[IsAuthenticated])
     def change_password(self, request):
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        
         user = request.user
         user.set_password(serializer.validated_data['new_password'])
         user.save()
-        
         return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
 
 
@@ -57,25 +53,28 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()
+    # Optimized: Fetch category in the same query
+    queryset = Product.objects.select_related('category').all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Optimized: Fetch user and nested order items/products in one go
+        queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
         if self.request.user.role == 'admin':
-            return Order.objects.all()
-        return Order.objects.filter(user=self.request.user)
+            return queryset.all()
+        return queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 class OrderItemViewSet(viewsets.ModelViewSet):
-    queryset = OrderItem.objects.all()
+    # Optimized: Join order and product
+    queryset = OrderItem.objects.select_related('order', 'product').all()
     serializer_class = OrderItemSerializer
 
     def get_queryset(self):
@@ -86,7 +85,8 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         return queryset
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = Review.objects.all()
+    # Optimized: Fetch user and product details together
+    queryset = Review.objects.select_related('user', 'product').all()
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
 
@@ -98,19 +98,20 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         product_id = self.request.query_params.get('product')
         if product_id:
-            return Review.objects.filter(product_id=product_id).order_by('-created_at')
-        return Review.objects.all()
+            return Review.objects.select_related('user', 'product').filter(product_id=product_id).order_by('-created_at')
+        return super().get_queryset()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 class WishlistViewSet(viewsets.ModelViewSet):
-    queryset = Wishlist.objects.all()
+    # Optimized: Fetch product and user
+    queryset = Wishlist.objects.select_related('user', 'product').all()
     serializer_class = WishlistSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Wishlist.objects.filter(user=self.request.user)
+        return Wishlist.objects.select_related('user', 'product').filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -120,7 +121,8 @@ class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Cart.objects.filter(user=self.request.user)
+        # Optimized: Fetch user
+        return Cart.objects.select_related('user').filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -130,7 +132,8 @@ class CartItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return CartItem.objects.filter(cart__user=self.request.user)
+        # Optimized: Join cart, user, and product
+        return CartItem.objects.select_related('product', 'cart', 'cart__user').filter(cart__user=self.request.user)
 
     def perform_create(self, serializer):
         cart, created = Cart.objects.get_or_create(user=self.request.user)
@@ -142,12 +145,14 @@ class CouponViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
 class PaymentViewSet(viewsets.ModelViewSet):
-    queryset = Payment.objects.all()
+    # Optimized: Join order
+    queryset = Payment.objects.select_related('order').all()
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
 
 class AdminLogViewSet(viewsets.ModelViewSet):
-    queryset = AdminLog.objects.all()
+    # Optimized: Join user
+    queryset = AdminLog.objects.select_related('user').all()
     serializer_class = AdminLogSerializer
     permission_classes = [IsAdminUser]
 
@@ -162,14 +167,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         email = attrs.get("email")
         password = attrs.get("password")
-
         user = authenticate(request=self.context.get('request'), username=email, password=password)
-
         if not user:
             raise serializers.ValidationError("Invalid email or password")
-
         refresh = self.get_token(user)
-
         return {
             'refresh': str(refresh),
             'access': str(refresh.access_token),

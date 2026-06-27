@@ -2,7 +2,7 @@ import { useEffect, useState, useContext } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
-import {toast} from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
 const AdminInput = styled.input`
   width: 100%;
@@ -11,12 +11,13 @@ const AdminInput = styled.input`
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
+  box-sizing: border-box;
   transition: all 0.3s ease;
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    border-color: #2e7d32;
+    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2);
   }
 `;
 
@@ -27,14 +28,15 @@ const AdminTextarea = styled.textarea`
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
+  box-sizing: border-box;
   transition: all 0.3s ease;
   min-height: 100px;
   resize: vertical;
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    border-color: #2e7d32;
+    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2);
   }
 `;
 
@@ -45,28 +47,29 @@ const AdminSelect = styled.select`
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
+  box-sizing: border-box;
   transition: all 0.3s ease;
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    border-color: #2e7d32;
+    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2);
   }
 `;
 
 const AdminButton = styled(motion.button)`
   padding: 12px 20px;
-  background: #4CAF50;
+  background: #2e7d32;
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 16px;
   cursor: pointer;
   transition: background 0.3s ease;
-  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
 
   &:hover {
-    background: #45a049;
+    background: #1b5e20;
   }
 
   &:disabled {
@@ -77,25 +80,54 @@ const AdminButton = styled(motion.button)`
 
 const DeleteButton = styled(AdminButton)`
   background: #e74c3c;
-
   &:hover {
     background: #c0392b;
   }
 `;
 
 const ListItem = styled(motion.li)`
-  background: #f9f9f9;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 0.75rem;
+  background: #ffffff;
+  padding: 1.25rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05);
+  border: 1px solid #e8f5e9;
+
+  @media (min-width: 768px) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+`;
+
+const ContentColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const ActionRow = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  
+  @media (min-width: 768px) {
+    width: auto;
+  }
+  
+  button {
+    flex: 1;
+    @media (min-width: 768px) {
+      flex: initial;
+    }
+  }
 `;
 
 const SectionTitle = styled.h2`
-  color: #2c3e50;
+  color: #2e7d32;
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
   display: flex;
@@ -146,6 +178,7 @@ const ProductsSection = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this product?')) return;
     try {
       await axiosInstance.delete(`/api/products/${id}/`);
       toast.success('🗑️ Product deleted successfully');
@@ -169,30 +202,35 @@ const ProductsSection = () => {
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </AdminSelect>
         <AdminInput placeholder="Image URL" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} />
-        <AdminButton onClick={handleSubmit} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          {editId ? 'Update Product' : 'Add Product'}
-        </AdminButton>
-        {editId && (
-          <AdminButton onClick={() => {
-            setEditId(null);
-            setForm({ name: '', description: '', price: '', stock: '', category: '', image_url: '' });
-          }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ background: '#f39c12' }}>
-            Cancel
+        
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <AdminButton onClick={handleSubmit} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            {editId ? 'Update Product' : 'Add Product'}
           </AdminButton>
-        )}
+          {editId && (
+            <AdminButton onClick={() => {
+              setEditId(null);
+              setForm({ name: '', description: '', price: '', stock: '', category: '', image_url: '' });
+            }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ background: '#f39c12' }}>
+              Cancel
+            </AdminButton>
+          )}
+        </div>
       </div>
 
-      <ul style={{ marginTop: '2rem' }}>
+      <ul style={{ marginTop: '2rem', padding: 0, listStyle: 'none' }}>
         {products.map(p => (
           <ListItem key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            <div>
-              <strong>{p.name}</strong> - ${p.price} ({p.stock} in stock)
-              <div style={{ fontSize: '0.9rem', color: '#666' }}>{p.description.substring(0, 50)}...</div>
-            </div>
-            <div>
-              <AdminButton onClick={() => handleEdit(p)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ background: '#3498db' }}>Edit</AdminButton>
-              <DeleteButton onClick={() => handleDelete(p.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>Delete</DeleteButton>
-            </div>
+            <ContentColumn>
+              <div><strong>{p.name}</strong> - ${Number(p.price).toFixed(2)} ({p.stock} in stock)</div>
+              <div style={{ fontSize: '0.9rem', color: '#666', maxWidth: '100%', wordBreak: 'break-word' }}>
+                {p.description ? `${p.description.substring(0, 75)}...` : 'No description provided.'}
+              </div>
+            </ContentColumn>
+            <ActionRow>
+              <AdminButton onClick={() => handleEdit(p)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ background: '#3498db', marginBottom: 0 }}>Edit</AdminButton>
+              <DeleteButton onClick={() => handleDelete(p.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ marginBottom: 0 }}>Delete</DeleteButton>
+            </ActionRow>
           </ListItem>
         ))}
       </ul>

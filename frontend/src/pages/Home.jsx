@@ -15,7 +15,7 @@ const Home = () => {
       <div className="content-wrapper">
         <div className="space-y-8">
           <h1 className="hero-heading text-transparent bg-clip-text bg-gradient-to-r from-blue-800 to-indigo-900">
-            Welcome to Our eCommerce Platform
+            Welcome to EazyShop
           </h1>
           
           <p className="subtitle text-gray-800">

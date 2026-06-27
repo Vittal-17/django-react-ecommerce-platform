@@ -1,6 +1,7 @@
 import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
+import styled from 'styled-components';
 
 // ==========================================
 // DEBOUNCED QUANTITY CONTROLLER COMPONENT
@@ -15,13 +16,11 @@ const CartQuantityController = ({ itemId, initialQuantity, stockLimit, onQuantit
 
   useEffect(() => {
     if (localQuantity === initialQuantity) return;
-
     const delayDebounceFn = setTimeout(() => {
       if (localQuantity > 0 && localQuantity <= stockLimit) {
         onQuantityUpdate(itemId, localQuantity);
       }
     }, 500);
-
     return () => clearTimeout(delayDebounceFn);
   }, [localQuantity, itemId, initialQuantity, onQuantityUpdate, stockLimit]);
 
@@ -49,69 +48,32 @@ const CartQuantityController = ({ itemId, initialQuantity, stockLimit, onQuantit
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <button 
+    <QuantityWrapper>
+      <ControlButton 
         type="button"
         onClick={handleDecrement}
         disabled={localQuantity <= 1}
-        style={{
-          ...baseBtnStyle,
-          background: localQuantity <= 1 ? '#ffb3b3' : '#ff4d4d',
-          cursor: localQuantity <= 1 ? 'not-allowed' : 'pointer'
-        }}
-        title="Decrease quantity"
-      >
-        ➖
-      </button>
+        $disabled={localQuantity <= 1}
+        $variant="decrement"
+      >➖</ControlButton>
       
-      <input
+      <QuantityInput
         type="number"
         min="1"
         value={localQuantity}
         onChange={handleManualInput}
         onBlur={handleBlur}
-        style={inputStyle}
       />
       
-      <button 
+      <ControlButton 
         type="button"
         onClick={handleIncrement}
         disabled={isAtLimit}
-        style={{
-          ...baseBtnStyle,
-          background: isAtLimit ? '#a5d6a7' : '#4caf50',
-          cursor: isAtLimit ? 'not-allowed' : 'pointer'
-        }}
-        title={isAtLimit ? "Out of stock" : "Increase quantity"}
-      >
-        ➕
-      </button>
-    </div>
+        $disabled={isAtLimit}
+        $variant="increment"
+      >➕</ControlButton>
+    </QuantityWrapper>
   );
-};
-
-// Quick styles
-const baseBtnStyle = {
-  border: 'none',
-  padding: '0.4rem 0.6rem',
-  borderRadius: '4px',
-  fontSize: '0.8rem',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  userSelect: 'none',
-  color: 'white',
-  transition: 'background 0.2s ease'
-};
-
-const inputStyle = {
-  width: '50px', 
-  textAlign: 'center', 
-  padding: '0.25rem',
-  border: '1px solid #ccc',
-  borderRadius: '4px',
-  fontWeight: 'bold',
-  MozAppearance: 'textfield'
 };
 
 // ==========================================
@@ -136,7 +98,6 @@ const Cart = () => {
       const res = await axiosInstance.get('/api/cart-items/');
       setCartItems(res.data);
     } catch (err) {
-      console.error('Failed to load cart items:', err);
       showToast('❌ Failed to load cart items');
     } finally {
       setLoading(false);
@@ -149,7 +110,7 @@ const Cart = () => {
       const ids = res.data.map(item => item.product.id);
       setWishlistIds(ids);
     } catch (err) {
-      console.error('Failed to load wishlist:', err);
+      console.error(err);
     }
   };
 
@@ -159,41 +120,26 @@ const Cart = () => {
       setTimeout(() => navigate('/login'), 2000);
       return;
     }
-    if (wishlistIds.includes(productId)) {
-      showToast('Already in wishlist');
-      return;
-    }
+    if (wishlistIds.includes(productId)) return showToast('Already in wishlist');
     try {
       await axiosInstance.post('/api/wishlist/', { product_id: productId });
       setWishlistIds(prev => [...prev, productId]);
       showToast('Added to wishlist ❤️');
     } catch (err) {
-      console.error('Failed to add to wishlist:', err);
       showToast('Failed to add to wishlist');
     }
   };
 
   const handleQuantityChange = async (id, quantity) => {
     try {
-      // 1. Optimistic Update (Immediate UI feedback)
-      setCartItems(prevItems => 
-        prevItems.map(item => item.id === id ? { ...item, quantity } : item)
-      );
-      
-      // 2. Perform API call
+      setCartItems(prevItems => prevItems.map(item => item.id === id ? { ...item, quantity } : item));
       await axiosInstance.patch(`/api/cart-items/${id}/`, { quantity });
-      showToast('Quantity updated');
     } catch (err) {
-      console.error('Failed to update quantity:', err);
-      
-      // 3. Universal Error Handling
       if (err.response && err.response.status === 400) {
-        showToast('❌ No more stock available for this item');
+        showToast('❌ No more stock available');
       } else {
         showToast('❌ Failed to update');
       }
-      
-      // Revert to server-side source of truth on failure
       fetchCartItems(); 
     }
   };
@@ -205,7 +151,6 @@ const Cart = () => {
       fetchCartItems();
       showToast('Item removed from cart');
     } catch (err) {
-      console.error('Failed to remove item:', err);
       showToast('Failed to remove item');
     }
   };
@@ -224,53 +169,200 @@ const Cart = () => {
   }, [axiosInstance]);
 
   return (
-    <div style={{ maxWidth: '800px', margin: 'auto', padding: '1rem' }}>
-      <h1 style={{ textAlign: 'center' }}>🛒 Your Cart</h1>
-      {toast && <div style={{ background: '#4caf50', color: 'white', padding: '0.75rem', marginBottom: '1rem', borderRadius: '8px', textAlign: 'center' }}>{toast}</div>}
+    <CartContainer>
+      <h1>🛒 Your Cart</h1>
+      {toast && <ToastMessage>{toast}</ToastMessage>}
 
       {loading ? (
-        <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-          <div className="spinner" style={{ border: '6px solid #f3f3f3', borderTop: '6px solid #4caf50', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: 'auto' }}></div>
-        </div>
+        <SpinnerContainer><div className="spinner"></div></SpinnerContainer>
       ) : (
         <>
           {cartItems.length === 0 ? (
-            <p style={{ textAlign: 'center' }}>Your cart is empty 🛒</p>
+            <EmptyMessage>Your cart is empty 🛒</EmptyMessage>
           ) : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
+            <CartList>
               {cartItems.map(item => (
-                <li key={item.id} style={{ background: '#fafafa', marginBottom: '1rem', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center' }}>
-                  <img src={item.product_image} alt={item.product_name || item.name} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginRight: '1rem' }} />
-                  <div style={{ flexGrow: 1 }}>
-                    <strong>{item.product_name || item.name}</strong>
-                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CartItemCard key={item.id}>
+                  <ProductImage src={item.product_image} alt={item.product_name || item.name} />
+                  
+                  <ProductDetails>
+                    <ProductTitle>{item.product_name || item.name}</ProductTitle>
+                    <ControlsRow>
                       <CartQuantityController 
                         itemId={item.id} 
                         initialQuantity={item.quantity} 
                         stockLimit={item.product_stock || 99} 
                         onQuantityUpdate={handleQuantityChange} 
                       />
-                      <span>× ${Number(item.price).toFixed(2)}</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                    <strong>${(item.quantity * Number(item.price)).toFixed(2)}</strong>
-                    <button onClick={() => handleRemoveItem(item.id)} style={{ background: 'red', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>Remove</button>
-                    <button onClick={() => handleAddToWishlist(item.product)} style={{ background: 'none', border: 'none', cursor: wishlistIds.includes(item.product) ? 'default' : 'pointer', fontSize: '1.5rem' }} title={wishlistIds.includes(item.product) ? 'Already in wishlist' : 'Add to wishlist'} disabled={wishlistIds.includes(item.product)}>
+                      <UnitPrice>× ${Number(item.price).toFixed(2)}</UnitPrice>
+                    </ControlsRow>
+                  </ProductDetails>
+
+                  <ActionColumn>
+                    <TotalPrice>${(item.quantity * Number(item.price)).toFixed(2)}</TotalPrice>
+                    <RemoveButton onClick={() => handleRemoveItem(item.id)}>Remove</RemoveButton>
+                    <WishlistButton 
+                      onClick={() => handleAddToWishlist(item.product)} 
+                      disabled={wishlistIds.includes(item.product)}
+                    >
                       {wishlistIds.includes(item.product) ? '❤️' : '🤍'}
-                    </button>
-                  </div>
-                </li>
+                    </WishlistButton>
+                  </ActionColumn>
+                </CartItemCard>
               ))}
-            </ul>
+            </CartList>
           )}
-          <h3 style={{ textAlign: 'right', marginTop: '1rem' }}>Total: ${total}</h3>
-          <button onClick={handleProceedToCheckout} style={{ display: 'block', margin: '1rem auto', padding: '0.75rem 1.5rem', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem' }}>✅ Proceed to Checkout</button>
+          
+          <CheckoutSection>
+            <h3>Total: ${total}</h3>
+            <CheckoutButton onClick={handleProceedToCheckout}>✅ Proceed to Checkout</CheckoutButton>
+          </CheckoutSection>
         </>
       )}
-      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }`}</style>
-    </div>
+      
+      <style>{`
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #4caf50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: auto; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      `}</style>
+    </CartContainer>
   );
 };
+
+// ==========================================
+// RESPONSIVE STYLED COMPONENTS
+// ==========================================
+
+const CartContainer = styled.div`
+  max-width: 800px;
+  margin: auto;
+  padding: 1rem;
+  h1 { text-align: center; font-size: clamp(1.8rem, 4vw, 2.5rem); margin-bottom: 2rem; }
+`;
+
+const ToastMessage = styled.div`
+  background: #4caf50; color: white; padding: 0.75rem; margin-bottom: 1rem; border-radius: 8px; text-align: center;
+`;
+
+const SpinnerContainer = styled.div` text-align: center; margin-top: 2rem; `;
+const EmptyMessage = styled.p` text-align: center; font-size: 1.2rem; color: #666; `;
+
+const CartList = styled.ul`
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`;
+
+// THE FIX: Stacks columns on mobile, row on desktop
+const CartItemCard = styled.li`
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+
+  @media (min-width: 600px) {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+  }
+`;
+
+const ProductImage = styled.img`
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  border-radius: 8px;
+`;
+
+const ProductDetails = styled.div`
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: 100%;
+`;
+
+const ProductTitle = styled.strong`
+  font-size: 1.1rem;
+  color: #333;
+`;
+
+const ControlsRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+
+  @media (min-width: 600px) {
+    justify-content: flex-start;
+  }
+`;
+
+const UnitPrice = styled.span`
+  color: #666;
+  font-size: 0.95rem;
+`;
+
+const ActionColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+
+  @media (min-width: 600px) {
+    align-items: flex-end;
+    width: auto;
+  }
+`;
+
+const TotalPrice = styled.strong`
+  font-size: 1.2rem;
+  color: #1b5e20;
+`;
+
+const RemoveButton = styled.button`
+  background: #ff4d4d; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;
+  transition: background 0.2s;
+  &:hover { background: #e60000; }
+  @media (min-width: 600px) { width: auto; }
+`;
+
+const WishlistButton = styled.button`
+  background: none; border: none; cursor: ${props => props.disabled ? 'default' : 'pointer'}; font-size: 1.5rem;
+`;
+
+const CheckoutSection = styled.div`
+  margin-top: 2rem;
+  text-align: right;
+  border-top: 2px solid #eee;
+  padding-top: 1.5rem;
+  
+  h3 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
+`;
+
+const CheckoutButton = styled.button`
+  width: 100%; padding: 1rem; background: #4caf50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1.1rem; font-weight: bold;
+  @media (min-width: 600px) { width: auto; padding: 1rem 2.5rem; }
+`;
+
+// QUANTITY CONTROLLER STYLES
+const QuantityWrapper = styled.div` display: flex; align-items: center; gap: 4px; `;
+const QuantityInput = styled.input` width: 50px; text-align: center; padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; font-weight: bold; `;
+const ControlButton = styled.button`
+  border: none; padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.8rem; color: white; transition: background 0.2s;
+  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
+  background: ${props => {
+    if (props.$variant === 'decrement') return props.$disabled ? '#ffb3b3' : '#ff4d4d';
+    return props.$disabled ? '#a5d6a7' : '#4caf50';
+  }};
+`;
 
 export default Cart;

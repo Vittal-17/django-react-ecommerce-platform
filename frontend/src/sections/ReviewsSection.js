@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { FaStar } from 'react-icons/fa';
 import AuthContext from '../context/AuthContext';
-import {toast} from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
 const DeleteButton = styled(motion.button)`
   padding: 12px 20px;
@@ -13,32 +13,31 @@ const DeleteButton = styled(motion.button)`
   border-radius: 8px;
   font-size: 16px;
   cursor: pointer;
-
-  &:hover {
-    background: #c0392b;
-  }
+  width: 100%;
+  white-space: nowrap;
+  &:hover { background: #c0392b; }
+  @media (min-width: 768px) { width: auto; }
 `;
 
 const ListItem = styled(motion.li)`
-  background: #f9f9f9;
-  padding: 1rem;
-  border-radius: 8px;
+  background: #ffffff;
+  padding: 1.25rem;
+  border-radius: 12px;
   margin-bottom: 0.75rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-`;
-
-const StarsContainer = styled.div`
-  display: flex;
-  align-items: center;
-  color: #f39c12;
-  gap: 2px;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05);
+  border: 1px solid #e8f5e9;
+  @media (min-width: 768px) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 `;
 
 const SectionTitle = styled.h2`
-  color: #2c3e50;
+  color: #2e7d32;
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
 `;
@@ -46,26 +45,28 @@ const SectionTitle = styled.h2`
 const ReviewsSection = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [reviews, setReviews] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchReviews = async () => {
-    const [reviewsRes, usersRes, productsRes] = await Promise.all([
-      axiosInstance.get('/api/reviews/'),
-      axiosInstance.get('/api/users/'),
-      axiosInstance.get('/api/products/')
-    ]);
-    setReviews(reviewsRes.data);
-    setUsers(usersRes.data);
-    setProducts(productsRes.data);
+    try {
+      setLoading(true);
+      // Now we only need to fetch reviews. 
+      // The username is already inside each review object thanks to the Serializer!
+      const res = await axiosInstance.get('/api/reviews/');
+      setReviews(res.data);
+    } catch (err) {
+      toast.error('❌ Failed to load reviews');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchReviews();
-    // eslint-disable-next-line
   }, []);
 
   const handleDelete = async (id) => {
+    if (!window.confirm('Delete this review?')) return;
     try {
       await axiosInstance.delete(`/api/reviews/${id}/`);
       toast.success('🗑️ Review deleted');
@@ -78,33 +79,24 @@ const ReviewsSection = () => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <SectionTitle>⭐ Reviews</SectionTitle>
-      {(!users.length || !products.length) ? <div>Loading...</div> : (
-        <ul>
-          {reviews.map(review => {
-            const user = users.find(u => String(u.id) === String(review.user));
-            const product = products.find(p => String(p.id) === String(review.product));
-            return (
-              <ListItem key={review.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: 'bold' }}>{user?.username || 'Unknown User'}</div>
-                    <StarsContainer>
-                      {[...Array(5)].map((_, i) => (
-                        <FaStar key={i} color={i < review.rating ? '#f39c12' : '#e0e0e0'} size={14} />
-                      ))}
-                    </StarsContainer>
-                  </div>
-                  <div style={{ marginBottom: '0.5rem', fontStyle: 'italic' }}>
-                    "{review.comment}"
-                  </div>
-                  <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                    On: {product?.name || 'Unknown Product'}
-                  </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>Loading reviews...</div>
+      ) : (
+        <ul style={{ padding: 0, listStyle: 'none' }}>
+          {reviews.map(review => (
+            <ListItem key={review.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                  {review.username || 'Anonymous'}
                 </div>
-                <DeleteButton onClick={() => handleDelete(review.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>Delete</DeleteButton>
-              </ListItem>
-            );
-          })}
+                <div style={{ marginBottom: '0.5rem', fontStyle: 'italic' }}>
+                  "{review.comment}"
+                </div>
+                {/* You can add logic for rating stars here using review.rating */}
+              </div>
+              <DeleteButton onClick={() => handleDelete(review.id)}>Delete</DeleteButton>
+            </ListItem>
+          ))}
         </ul>
       )}
     </motion.div>

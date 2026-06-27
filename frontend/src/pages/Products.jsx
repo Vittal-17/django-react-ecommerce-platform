@@ -225,22 +225,60 @@ const ProductsContainer = styled.div`
 `;
 
 const FilterContainer = styled(motion.div)`
-  display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; justify-content: center;
+  display: flex; 
+  flex-direction: column; /* Stacks search and filters on mobile */
+  gap: 1rem; 
+  margin-bottom: 2rem; 
+  align-items: center;
+
+  @media (min-width: 768px) {
+    flex-direction: row; /* Side-by-side on tablet/desktop */
+    justify-content: center;
+  }
 `;
 
-const SearchBar = styled.div`
-  display: flex; align-items: center; background: white; padding: 0.5rem 1rem; border-radius: 30px; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1); width: 300px;
+const SearchBar = styled.div` 
+  display: flex; align-items: center; background: white; padding: 0.5rem 1rem; border-radius: 30px; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1); 
+  width: 100%; /* Full width on mobile */
+  max-width: 400px; /* Caps out on desktop */
+  
   input { border: none; margin-left: 0.5rem; font-size: 1rem; width: 100%; &:focus { outline: none; } }
   svg { color: #9e9e9e; }
 `;
 
-const Select = styled(motion.select)`
-  padding: 0.5rem 1rem; border-radius: 30px; border: 2px solid #e0e0e0; background: white; font-size: 1rem; cursor: pointer; transition: all 0.3s ease;
+const Select = styled(motion.select)` 
+  width: 100%; /* Full width dropdowns on mobile */
+  max-width: 300px;
+  padding: 0.6rem 1rem; border-radius: 30px; border: 2px solid #e0e0e0; background: white; font-size: 1rem; cursor: pointer;
+  
+  @media (min-width: 768px) {
+    width: auto; /* Shrinks back down on desktop */
+  }
   &:focus { outline: none; border-color: #4CAF50; }
 `;
 
-const ProductGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2rem; padding: 1rem;
+const ProductGrid = styled.div` 
+  display: grid; 
+  gap: 1.5rem; 
+  padding: 1rem 0;
+
+  /* Mobile: 1 Column */
+  grid-template-columns: 1fr;
+
+  /* Tablet: 2 Columns */
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Desktop: 3 Columns */
+  @media (min-width: 900px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Large Desktop: 4 Columns */
+  @media (min-width: 1200px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
 `;
 
 const ProductCard = styled(motion.div)`

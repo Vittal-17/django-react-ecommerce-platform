@@ -11,34 +11,57 @@ import OrdersSection from '../sections/OrdersSection';
 import ReviewsSection from '../sections/ReviewsSection';
 
 const AdminContainer = styled.div`
-  padding: 2rem;
+  padding: 1rem; /* Smaller padding on mobile */
+  width: 100%;
   max-width: 1200px;
-  margin: auto;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  margin: 0 auto;
   min-height: 100vh;
+  box-sizing: border-box;
+  background: #f4f7f6; /* Cleaner background */
+
+  @media (min-width: 768px) {
+    padding: 2rem;
+  }
 `;
 
 const NavTabs = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  flex-wrap: wrap; /* Allows buttons to stack on small screens */
+  gap: 0.5rem;
   justify-content: center;
   margin-bottom: 2rem;
+  
+  @media (min-width: 768px) {
+    gap: 1rem;
+  }
 `;
 
 const TabButton = styled(motion.button)`
   padding: 10px 20px;
-  background: ${({ $active }) => ($active ? '#2e7d32' : '#4CAF50')};
-  color: white;
-  border: none;
   border-radius: 8px;
   font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.3s ease, transform 0.2s ease;
+  border: 1px solid #c8e6c9;
+  transition: all 0.3s ease;
+  
+  /* Remove default motion/button shadows that cause white overlays */
+  box-shadow: none !important;
+
+  /* Explicitly define styles for all interaction states */
+  background: ${({ $active }) => ($active ? '#2e7d32' : '#e8f5e9')} !important;
+  color: ${({ $active }) => ($active ? '#ffffff' : '#2e7d32')} !important;
 
   &:hover {
-    background: ${({ $active }) => ($active ? '#256029' : '#45a049')};
-    transform: translateY(-2px);
+    background: ${({ $active }) => ($active ? '#1b5e20' : '#c8e6c9')} !important;
+    color: ${({ $active }) => ($active ? '#ffffff' : '#1b5e20')} !important;
+  }
+
+  &:focus, &:active {
+    outline: none !important;
+    /* Force the button to stay green regardless of click state */
+    background: ${({ $active }) => ($active ? '#2e7d32' : '#e8f5e9')} !important;
+    color: ${({ $active }) => ($active ? '#ffffff' : '#2e7d32')} !important;
   }
 `;
 

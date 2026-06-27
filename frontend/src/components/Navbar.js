@@ -6,7 +6,7 @@ import {
   FaSignInAlt, FaStore, FaClipboardList, 
   FaUserShield, FaSignOutAlt, FaHeart,
   FaEdit, FaMapMarkerAlt, FaPhone, FaEnvelope,
-  FaChevronDown, FaSpinner, FaLock
+  FaChevronDown, FaSpinner, FaLock, FaBars, FaTimes
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
@@ -17,8 +17,8 @@ const Navbar = () => {
   const { user, logoutUser, axiosInstance } = useContext(AuthContext);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  // Replaced 'isEditing' with a multi-state to handle the separate forms
-  const [editMode, setEditMode] = useState('none'); // 'none' | 'profile' | 'password'
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // NEW: Track mobile menu state
+  const [editMode, setEditMode] = useState('none');
   const [isLoading, setIsLoading] = useState(false);
   const [userDetails, setUserDetails] = useState(null);
   const navigate = useNavigate();
@@ -33,17 +33,13 @@ const Navbar = () => {
   });
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
-    if (user && isDropdownOpen) {
-      fetchUserDetails();
-    }
+    if (user && isDropdownOpen) fetchUserDetails();
   }, [isDropdownOpen, user]);
 
   useEffect(() => {
@@ -81,12 +77,12 @@ const Navbar = () => {
     }
   };
 
-  // --- Handlers for the Decoupled APIs ---
+  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleUpdateProfile = async (data) => {
     setIsLoading(true);
     try {
-      // Send ONLY the permitted fields to the update endpoint
       await axiosInstance.patch(`/api/users/${user.id}/`, {
         address: data.address,
         phone: data.phone
@@ -105,14 +101,12 @@ const Navbar = () => {
   const handleChangePassword = async (data) => {
     setIsLoading(true);
     try {
-      // Hit the new custom endpoint strictly for passwords
       await axiosInstance.put(`/api/users/change-password/`, {
         current_password: data.current_password,
         new_password: data.new_password
       });
       toast.success('🔒 Password updated successfully!');
       setEditMode('none');
-      // Clear password fields from the form memory after success
       reset(prev => ({ ...prev, current_password: '', new_password: '' })); 
     } catch (error) {
       const err = error.response?.data || 'Password update failed';
@@ -124,15 +118,41 @@ const Navbar = () => {
 
   const handleLogout = () => {
     toast.success("🔒 Logged out successfully!");
+    closeMobileMenu();
     setTimeout(() => {
       logoutUser();
       navigate("/");
     }, 1000);
   };
 
+  // Helper component to render the standard links so we don't repeat code
+  const NavLinksContent = ({ isMobile }) => (
+    <>
+      <CustomLink to="/" label="Home" icon={<FaHome />} onClick={isMobile ? closeMobileMenu : undefined} />
+      <CustomLink to="/products" label="Products" icon={<FaStore />} onClick={isMobile ? closeMobileMenu : undefined} />
+      <CustomLink to="/cart" label="Cart" icon={<FaShoppingCart />} onClick={isMobile ? closeMobileMenu : undefined} />
+      <CustomLink to="/dashboard" label="Dashboard" icon={<FaClipboardList />} onClick={isMobile ? closeMobileMenu : undefined} />
+      {user?.role === 'admin' && (
+        <CustomLink to="/admin" label="Admin" icon={<FaUserShield />} onClick={isMobile ? closeMobileMenu : undefined} />
+      )}
+      
+      {/* On mobile, we place the RightLinks items inline with the rest */}
+      {isMobile && user && (
+        <CustomLink to="/wishlist" label="Wishlist" icon={<FaHeart />} onClick={closeMobileMenu} />
+      )}
+      {isMobile && !user && (
+        <CustomLink to="/login" label="Login" icon={<FaSignInAlt />} onClick={closeMobileMenu} />
+      )}
+    </>
+  );
+
   return (
     <>
       <Toaster position="bottom-right" toastOptions={{ duration: 2000 }} />
+      
+      {/* Changing NavContainer to a div instead of a nav, and using a CSS column layout
+        allows the expanding mobile menu to stay structurally sound below the top bar 
+      */}
       <NavContainer 
         $isScrolled={isScrolled}
         initial={{ y: -100 }}
@@ -140,24 +160,31 @@ const Navbar = () => {
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       >
         <NavContent>
-          <LeftLinks>
-            <CustomLink to="/" label="Home" icon={<FaHome />} />
-            <CustomLink to="/products" label="Products" icon={<FaStore />} />
-            <CustomLink to="/cart" label="Cart" icon={<FaShoppingCart />} />
-            <CustomLink to="/dashboard" label="Dashboard" icon={<FaClipboardList />} />
-            {user?.role === 'admin' && (
-              <CustomLink to="/admin" label="Admin" icon={<FaUserShield />} />
-            )}
-          </LeftLinks>
+          {/* MOBILE TOGGLE (Visible only on small screens) */}
+          <MobileToggleButton onClick={toggleMobileMenu}>
+            {isMobileMenuOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
+          </MobileToggleButton>
 
+          {/* DESKTOP LEFT LINKS (Hidden on small screens) */}
+          <DesktopLeftLinks>
+            <NavLinksContent isMobile={false} />
+          </DesktopLeftLinks>
+
+          {/* RIGHT SIDE USER PROFILE (Always visible) */}
           <RightLinks>
             {user ? (
               <>
-                <CustomLink to="/wishlist" label="Wishlist" icon={<FaHeart />} />
+                {/* Wishlist only shows on desktop right side, mobile has it in the menu */}
+                <DesktopWishlist>
+                  <CustomLink to="/wishlist" label="Wishlist" icon={<FaHeart />} />
+                </DesktopWishlist>
+                
                 <UserDropdownContainer>
                   <UserButton onClick={toggleDropdown}>
-                    <FaUser /> {user.username} <FaChevronDown size={12} />
+                    <FaUser /> <UsernameText>{user.username}</UsernameText> <FaChevronDown size={12} />
                   </UserButton>
+                  
+                  {/* DROPDOWN REMAINS UNTOUCHED */}
                   <AnimatePresence>
                     {isDropdownOpen && (
                       <DropdownMenu
@@ -166,8 +193,6 @@ const Navbar = () => {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.2 }}
                       >
-                        
-                        {/* --- VIEW 1: PROFILE DETAILS FORM --- */}
                         {editMode === 'profile' && (
                           <EditForm onSubmit={handleSubmit(handleUpdateProfile)}>
                             <h4 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>Edit Details</h4>
@@ -180,17 +205,11 @@ const Navbar = () => {
                               <Input type="tel" {...register("phone")} />
                             </FormGroup>
                             <ButtonGroup>
-                              <SaveButton type="submit" disabled={isLoading}>
-                                {isLoading ? <FaSpinner className="spin" /> : 'Save'}
-                              </SaveButton>
-                              <CancelButton type="button" onClick={() => setEditMode('none')}>
-                                Cancel
-                              </CancelButton>
+                              <SaveButton type="submit" disabled={isLoading}>{isLoading ? <FaSpinner className="spin" /> : 'Save'}</SaveButton>
+                              <CancelButton type="button" onClick={() => setEditMode('none')}>Cancel</CancelButton>
                             </ButtonGroup>
                           </EditForm>
                         )}
-
-                        {/* --- VIEW 2: PASSWORD CHANGE FORM --- */}
                         {editMode === 'password' && (
                           <EditForm onSubmit={handleSubmit(handleChangePassword)}>
                             <h4 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>Change Password</h4>
@@ -203,98 +222,152 @@ const Navbar = () => {
                               <Input type="password" {...register("new_password", { required: true })} />
                             </FormGroup>
                             <ButtonGroup>
-                              <SaveButton type="submit" disabled={isLoading}>
-                                {isLoading ? <FaSpinner className="spin" /> : 'Update'}
-                              </SaveButton>
-                              <CancelButton type="button" onClick={() => setEditMode('none')}>
-                                Cancel
-                              </CancelButton>
+                              <SaveButton type="submit" disabled={isLoading}>{isLoading ? <FaSpinner className="spin" /> : 'Update'}</SaveButton>
+                              <CancelButton type="button" onClick={() => setEditMode('none')}>Cancel</CancelButton>
                             </ButtonGroup>
                           </EditForm>
                         )}
-
-                        {/* --- VIEW 3: STANDARD USER INFO DASHBOARD --- */}
                         {editMode === 'none' && (
                           <>
                             <UserInfo>
                               <InfoItem><FaUser /> {userDetails?.username || user.username}</InfoItem>
                               <InfoItem><FaEnvelope /> {userDetails?.email || user.email}</InfoItem>
-                              {(userDetails?.address || user.address) && (
-                                <InfoItem><FaMapMarkerAlt /> {userDetails?.address || user.address}</InfoItem>
-                              )}
-                              {(userDetails?.phone || user.phone) && (
-                                <InfoItem><FaPhone /> {userDetails?.phone || user.phone}</InfoItem>
-                              )}
+                              {(userDetails?.address || user.address) && <InfoItem><FaMapMarkerAlt /> {userDetails?.address || user.address}</InfoItem>}
+                              {(userDetails?.phone || user.phone) && <InfoItem><FaPhone /> {userDetails?.phone || user.phone}</InfoItem>}
                             </UserInfo>
-                            <DropdownButton onClick={() => setEditMode('profile')}>
-                              <FaEdit /> Edit Details
-                            </DropdownButton>
-                            <DropdownButton onClick={() => setEditMode('password')}>
-                              <FaLock /> Change Password
-                            </DropdownButton>
+                            <DropdownButton onClick={() => setEditMode('profile')}><FaEdit /> Edit Details</DropdownButton>
+                            <DropdownButton onClick={() => setEditMode('password')}><FaLock /> Change Password</DropdownButton>
                           </>
                         )}
-
                         <DropdownDivider />
-                        <LogoutButton onClick={handleLogout}>
-                          <FaSignOutAlt /> Logout
-                        </LogoutButton>
+                        <LogoutButton onClick={handleLogout}><FaSignOutAlt /> Logout</LogoutButton>
                       </DropdownMenu>
                     )}
                   </AnimatePresence>
                 </UserDropdownContainer>
               </>
             ) : (
-              <CustomLink to="/login" label="Login" icon={<FaSignInAlt />} />
+              <DesktopWishlist>
+                <CustomLink to="/login" label="Login" icon={<FaSignInAlt />} />
+              </DesktopWishlist>
             )}
           </RightLinks>
         </NavContent>
+
+        {/* MOBILE MENU DROPDOWN (Visible only when toggled on small screens) */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <MobileMenuContainer
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <MobileLinksWrapper>
+                <NavLinksContent isMobile={true} />
+              </MobileLinksWrapper>
+            </MobileMenuContainer>
+          )}
+        </AnimatePresence>
       </NavContainer>
     </>
   );
 };
 
-// Styled Components
-const NavContainer = styled(motion.nav)`
+// ==========================================
+// STYLED COMPONENTS
+// ==========================================
+
+const NavContainer = styled(motion.div)`
   background: ${props => props.$isScrolled ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.92)'};
   backdrop-filter: blur(12px);
-  padding: ${props => props.$isScrolled ? '0.5rem 1rem' : '0.75rem 1.5rem'};
   position: fixed;
   top: 0;
   width: 100%;
+  box-sizing: border-box; /* THE FIX: Keeps width strictly inside the screen */
   z-index: 1000;
   display: flex;
-  justify-content: center;
-  box-shadow: ${props => props.$isScrolled 
-    ? '0 4px 20px rgba(46, 125, 50, 0.15)' 
-    : '0 4px 12px rgba(46, 125, 50, 0.1)'};
+  flex-direction: column; 
+  box-shadow: ${props => props.$isScrolled ? '0 4px 20px rgba(46, 125, 50, 0.15)' : '0 4px 12px rgba(46, 125, 50, 0.1)'};
   border-bottom: 1px solid #e8f5e9;
-  transition: all 0.3s ease;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 `;
 
 const NavContent = styled.div`
   display: flex;
   width: 100%;
+  box-sizing: border-box; /* THE FIX: Stops right-side bleeding */
   max-width: 1200px;
+  margin: 0 auto;
   align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  
+  @media (max-width: 768px) {
+    padding: 0.5rem 1rem;
+  }
 `;
 
-const LeftLinks = styled.div`
+// --- DESKTOP STYLES ---
+const DesktopLeftLinks = styled.div`
+  display: none;
+  @media (min-width: 768px) {
+    display: flex;
+    gap: 1rem;
+  }
+`;
+
+const DesktopWishlist = styled.div`
+  display: none;
+  @media (min-width: 768px) {
+    display: block;
+  }
+`;
+
+// --- MOBILE STYLES ---
+const MobileToggleButton = styled.button`
   display: flex;
-  gap: 1rem;
+  background: none;
+  border: none;
+  color: #2e7d32;
+  cursor: pointer;
+  padding: 0.5rem;
+  
+  @media (min-width: 768px) {
+    display: none; /* Hide on desktop */
+  }
 `;
 
+const MobileMenuContainer = styled(motion.div)`
+  width: 100%;
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid #e8f5e9;
+  overflow: hidden; /* Crucial for Framer Motion height animation */
+  
+  @media (min-width: 768px) {
+    display: none; /* Failsafe to hide on desktop */
+  }
+`;
+
+const MobileLinksWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  gap: 0.5rem;
+`;
+
+// --- UNIVERSAL STYLES ---
 const RightLinks = styled.div`
-  margin-left: auto;
   display: flex;
   gap: 1rem;
   align-items: center;
   position: relative;
 `;
 
-const CustomLink = ({ to, label, icon, ...animationProps }) => (
+const CustomLink = ({ to, label, icon, onClick, ...animationProps }) => (
   <NavLink 
     to={to} 
+    onClick={onClick}
     component={motion(Link)}
     {...animationProps}
     whileHover={{ scale: 1.05, backgroundColor: '#f0fff0' }}
@@ -343,8 +416,30 @@ const UserButton = styled(motion.button)`
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1);
 
+  /* MOBILE FIX: Tighter padding and gap */
+  @media (max-width: 480px) {
+    padding: 0.4rem 0.5rem;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+  }
+
   &:hover {
     background: #c8e6c9;
+  }
+`;
+
+const UsernameText = styled.span`
+  max-width: 80px; /* Forces truncation earlier on small phones */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  @media (min-width: 480px) {
+    max-width: 120px;
+  }
+  
+  @media (min-width: 768px) {
+    max-width: 200px;
   }
 `;
 
@@ -361,170 +456,26 @@ const DropdownMenu = styled(motion.div)`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-`;
-
-const UserInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  padding: 0.5rem 0;
-`;
-
-const InfoItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  color: #424242;
-  font-size: 0.95rem;
-
-  svg {
-    color: #2e7d32;
-    min-width: 16px;
+  
+  /* MOBILE FIX: Slimmer width to leave breathing room */
+  @media (max-width: 480px) {
+    right: 0; 
+    width: 250px; 
   }
 `;
 
-const DropdownButton = styled(motion.button)`
-  background: #f5f5f5;
-  border: none;
-  padding: 0.8rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 0.95rem;
-  color: #424242;
-  margin-top: 0.5rem;
+const UserInfo = styled.div` display: flex; flex-direction: column; gap: 0.8rem; padding: 0.5rem 0; `;
+const InfoItem = styled.div` display: flex; align-items: center; gap: 0.8rem; color: #424242; font-size: 0.95rem; svg { color: #2e7d32; min-width: 16px; } `;
+const DropdownButton = styled(motion.button)` background: #f5f5f5; border: none; padding: 0.8rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s ease; font-size: 0.95rem; color: #424242; margin-top: 0.5rem; &:hover { background: #e0e0e0; } svg { color: #2e7d32; } `;
+const DropdownDivider = styled.div` height: 1px; background: #e0e0e0; margin: 0.5rem 0; `;
+const LogoutButton = styled(motion.button)` color: white; background: #2e7d32; border: none; font-size: 0.95rem; font-weight: 600; padding: 0.8rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; transition: all 0.3s ease; margin-top: 0.5rem; &:hover { background: #1b5e20; } `;
 
-  &:hover {
-    background: #e0e0e0;
-  }
-
-  svg {
-    color: #2e7d32;
-  }
-`;
-
-const DropdownDivider = styled.div`
-  height: 1px;
-  background: #e0e0e0;
-  margin: 0.5rem 0;
-`;
-
-const LogoutButton = styled(motion.button)`
-  color: white;
-  background: #2e7d32;
-  border: none;
-  font-size: 0.95rem;
-  font-weight: 600;
-  padding: 0.8rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  margin-top: 0.5rem;
-
-  &:hover {
-    background: #1b5e20;
-  }
-`;
-
-const EditForm = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-
-  label {
-    font-size: 0.9rem;
-    color: #616161;
-  }
-`;
-
-const Input = styled.input`
-  padding: 0.6rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 0.95rem;
-
-  &:focus {
-    outline: none;
-    border-color: #4CAF50;
-  }
-`;
-
-const TextArea = styled.textarea`
-  padding: 0.6rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  resize: vertical;
-
-  &:focus {
-    outline: none;
-    border-color: #4CAF50;
-  }
-`;
-
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-`;
-
-const SaveButton = styled.button`
-  flex: 1;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 0.8rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: #388e3c;
-  }
-
-  &:disabled {
-    background: #a5d6a7;
-    cursor: not-allowed;
-  }
-
-  .spin {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-
-const CancelButton = styled.button`
-  flex: 1;
-  background: #f5f5f5;
-  color: #616161;
-  border: none;
-  padding: 0.8rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: #e0e0e0;
-  }
-`;
+const EditForm = styled.form` display: flex; flex-direction: column; gap: 1rem; `;
+const FormGroup = styled.div` display: flex; flex-direction: column; gap: 0.3rem; label { font-size: 0.9rem; color: #616161; } `;
+const Input = styled.input` padding: 0.6rem; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; &:focus { outline: none; border-color: #4CAF50; } `;
+const TextArea = styled.textarea` padding: 0.6rem; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; resize: vertical; &:focus { outline: none; border-color: #4CAF50; } `;
+const ButtonGroup = styled.div` display: flex; gap: 0.5rem; margin-top: 0.5rem; `;
+const SaveButton = styled.button` flex: 1; background: #4CAF50; color: white; border: none; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s ease; &:hover { background: #388e3c; } &:disabled { background: #a5d6a7; cursor: not-allowed; } .spin { animation: spin 1s linear infinite; } @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } `;
+const CancelButton = styled.button` flex: 1; background: #f5f5f5; color: #616161; border: none; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s ease; &:hover { background: #e0e0e0; } `;
 
 export default Navbar;

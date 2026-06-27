@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useEffect, useState, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 
@@ -53,33 +53,39 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.clear();
   };
 
-  const axiosInstance = axios.create({ baseURL: API_URL });
+  // 1. Wrap in useMemo so it doesn't reset on every render
+  const axiosInstance = useMemo(() => {
+    const instance = axios.create({ baseURL: API_URL });
 
-  axiosInstance.interceptors.request.use(async config => {
-    const storage = rememberMe ? localStorage : sessionStorage;
-    const access = storage.getItem('access');
-    const refresh = storage.getItem('refresh');
-    if (access) {
-      const decoded = jwtDecode(access);
-      const isExpired = decoded.exp * 1000 < Date.now();
+    instance.interceptors.request.use(async (config) => {
+      const storage = localStorage.getItem('remember') === 'true' ? localStorage : sessionStorage;
+      const access = storage.getItem('access');
+      const refresh = storage.getItem('refresh');
 
-      if (isExpired && refresh) {
-        try {
-          const response = await axios.post(`${API_URL}/api/token/refresh/`, { refresh });
-          if (response.status === 200) {
+      if (access) {
+        const decoded = jwtDecode(access);
+        const isExpired = decoded.exp * 1000 < Date.now();
+
+        if (isExpired && refresh) {
+          try {
+            const response = await axios.post(`${API_URL}/api/token/refresh/`, { refresh });
             storage.setItem('access', response.data.access);
             config.headers.Authorization = `Bearer ${response.data.access}`;
+          } catch (refreshErr) {
+            console.error('Token refresh failed:', refreshErr);
+            // We don't call logoutUser here because it's outside the component context
+            // Just let the 401 happen and the app will handle it
           }
-        } catch (refreshErr) {
-          console.error('Token refresh failed:', refreshErr);
-          logoutUser();
+        } else {
+          config.headers.Authorization = `Bearer ${access}`;
         }
-      } else {
-        config.headers.Authorization = `Bearer ${access}`;
       }
-    }
-    return config;
-  });
+      return config;
+    });
+
+    return instance;
+    // eslint-disable-next-line
+  }, [rememberMe]); // Re-create only if rememberMe toggles
 
   return (
     <AuthContext.Provider value={{ user, authTokens, loginUser, logoutUser, axiosInstance, rememberMe, setRememberMe }}>
