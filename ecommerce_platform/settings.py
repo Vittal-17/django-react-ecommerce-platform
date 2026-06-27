@@ -28,7 +28,12 @@ SECRET_KEY = config("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['django-react-ecommerce-platform.vercel.app', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'django-react-ecommerce-platform.vercel.app',
+    'https://django-react-ecommerce-platform.onrender.com',
+    'localhost', 
+    '127.0.0.1'
+]
 
 CORS_ALLOW_ALL_ORIGINS = False
 
