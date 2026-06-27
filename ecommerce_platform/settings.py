@@ -37,6 +37,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://django-react-ecommerce-platform.vercel.app",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://django-react-ecommerce-platform.vercel.app",
+]
+
 
 # Application definition
 
