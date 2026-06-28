@@ -6,8 +6,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from django.contrib.auth import authenticate
+from django.db import IntegrityError
+from rest_framework.exceptions import ValidationError
+from django.db import transaction
 
-# Consolidated Model & Serializer Imports
+
 from .models import (
     User, Category, Product, Order, OrderItem, Review, 
     Wishlist, Cart, CartItem, Coupon, Payment, AdminLog
@@ -63,14 +66,42 @@ class OrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Optimized: Fetch user and nested order items/products in one go
         queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
-        if self.request.user.role == 'admin':
+        if getattr(self.request.user, 'role', None) == 'admin':
             return queryset.all()
         return queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        Custom action to cancel an order if it is still pending.
+        Safely restores the product stock levels within an atomic transaction.
+        """
+        order = self.get_object()
+        
+        if order.status != 'pending':
+            return Response(
+                {"error": f"Order cannot be cancelled because its current status is '{order.status}'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        with transaction.atomic():
+            order.status = 'cancelled'
+            order.save()
+            
+            # Loop through order items and restore stock safely
+            for item in order.order_items.all():
+                product = Product.objects.select_for_update().get(id=item.product.id)
+                product.stock += item.quantity
+                product.save()
+                
+        return Response(
+            {"message": "Order has been successfully cancelled and stock restored.", "status": "cancelled"},
+            status=status.HTTP_200_OK
+        )
 
 class OrderItemViewSet(viewsets.ModelViewSet):
     # Optimized: Join order and product
@@ -137,7 +168,10 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         cart, created = Cart.objects.get_or_create(user=self.request.user)
-        serializer.save(cart=cart)
+        try:
+            serializer.save(cart=cart)
+        except IntegrityError:
+            raise ValidationError({"detail": "This product is already in your cart."})
 
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()

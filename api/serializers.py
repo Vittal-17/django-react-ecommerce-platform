@@ -37,7 +37,6 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'address', 'phone', 'role']
-        # Prevent users from changing restricted fields via PATCH
         read_only_fields = ['id', 'username', 'email', 'role'] 
 
 # --- NEW: Strictly for Password Changes ---
@@ -115,6 +114,23 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'user', 'status', 'created_at', 'order_items', 'total_price', 'address']
         read_only_fields = ['id', 'user', 'created_at', 'total_price', 'address']
+
+    def validate(self, data):
+        """
+        Validates that the user has a registered shipping address and phone number
+        prior to enabling order creation parameters.
+        """
+        user = self.context['request'].user
+        
+        # Enforce profile data integrity rules
+        user_address = getattr(user, 'address', '')
+        user_phone = getattr(user, 'phone', '')
+        
+        if not user_address or not str(user_address).strip() or not user_phone or not str(user_phone).strip():
+            raise serializers.ValidationError(
+                "Order placement failed: A valid shipping address and phone number are compulsory."
+            )
+        return data
 
     def create(self, validated_data):
         order_items_data = validated_data.pop('order_items')
