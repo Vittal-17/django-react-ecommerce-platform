@@ -6,14 +6,24 @@ from django.conf import settings
 # USERS
 # ==========================================
 class User(AbstractUser):
+
+    email = models.EmailField(unique=True) 
+    
     ROLE_CHOICES = (('user', 'User'), ('admin', 'Admin'))
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     address = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
+    
+    # Added unique=True for the phone number
+    phone = models.CharField(max_length=20, blank=True, null=True, unique=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username'] 
+
     def __str__(self):
-        return self.username
+        return self.email
 
 # ==========================================
 # E-COMMERCE CORE

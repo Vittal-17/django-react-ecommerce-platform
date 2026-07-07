@@ -1,105 +1,56 @@
 import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
 import { toast } from "react-hot-toast";
+import { FaTimes, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
 
-const AdminInput = styled.input`
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 16px;
-  box-sizing: border-box;
-  transition: all 0.3s ease;
-  &:focus {
-    outline: none;
-    border-color: #2e7d32;
-    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2);
-  }
-`;
-
-const AdminButton = styled(motion.button)`
-  padding: 12px 20px;
-  background: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-  white-space: nowrap;
-  &:hover {
-    background: #1b5e20;
-  }
-`;
-
-const DeleteButton = styled(AdminButton)`
-  background: #e74c3c;
-  &:hover {
-    background: #c0392b;
-  }
-`;
-
-const ListItem = styled(motion.li)`
-  background: #ffffff;
-  padding: 1.25rem;
-  border-radius: 12px;
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05);
-  border: 1px solid #e8f5e9;
-
-  @media (min-width: 768px) {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-`;
-
+// --- Styled Components ---
 const SectionTitle = styled.h2`
-  color: #2e7d32;
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  color: #2e7d32; margin-bottom: 1.5rem; font-size: 1.5rem;
+  display: flex; justify-content: space-between; align-items: center;
 `;
-
-const FormContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  
-  @media (min-width: 768px) {
-    flex-direction: row;
-    align-items: center;
-  }
+const AddNewButton = styled(motion.button)`
+  background: #2e7d32; color: white; border: none; padding: 0.8rem 1.2rem;
+  border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+  &:hover { background: #1b5e20; }
 `;
-
-const ActionRow = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-  
-  @media (min-width: 768px) {
-    width: auto;
-  }
-  
-  button {
-    flex: 1;
-    @media (min-width: 768px) {
-      flex: initial;
-    }
-  }
+const ListItem = styled(motion.li)`
+  background: #ffffff; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem;
+  display: flex; flex-direction: column; gap: 1rem;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05); border: 1px solid #e8f5e9;
+  @media (min-width: 768px) { flex-direction: row; justify-content: space-between; align-items: center; }
+`;
+const ActionRow = styled.div` display: flex; gap: 0.5rem; `;
+const ActionButton = styled(motion.button)`
+  padding: 0.6rem 1rem; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 0.4rem; color: white;
+  background: ${props => props.$bg || '#3498db'};
+  &:hover { filter: brightness(0.9); }
+`;
+const ModalOverlay = styled(motion.div)`
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999;
+`;
+const ModalCard = styled(motion.div)`
+  background: white; width: 90%; max-width: 400px; border-radius: 20px; padding: 2rem; position: relative;
+`;
+const CloseButton = styled.button`
+  position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; font-size: 1.2rem; color: #999; cursor: pointer;
+`;
+const AdminInput = styled.input`
+  width: 100%; padding: 12px; margin-bottom: 1.5rem; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem;
+  &:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.2); }
+`;
+const SaveButton = styled(motion.button)`
+  width: 100%; padding: 12px; background: #2e7d32; color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: 600; cursor: pointer;
 `;
 
 const CategoriesSection = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [categories, setCategories] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '' });
   const [editId, setEditId] = useState(null);
 
@@ -107,11 +58,14 @@ const CategoriesSection = () => {
     const res = await axiosInstance.get('/api/categories/');
     setCategories(res.data);
   };
+// eslint-disable-next-line
+  useEffect(() => { fetchCategories(); }, []);
 
-  useEffect(() => {
-    fetchCategories();
-    // eslint-disable-next-line
-  }, []);
+  const handleOpenModal = (category = null) => {
+    if (category) { setForm({ name: category.name }); setEditId(category.id); } 
+    else { setForm({ name: '' }); setEditId(null); }
+    setIsModalOpen(true);
+  };
 
   const handleSubmit = async () => {
     if (!form.name.trim()) return toast.error('Category name cannot be empty');
@@ -123,69 +77,55 @@ const CategoriesSection = () => {
         await axiosInstance.post('/api/categories/', form);
         toast.success('📂 Category added');
       }
-      setForm({ name: '' });
-      setEditId(null);
+      setIsModalOpen(false);
       fetchCategories();
-    } catch {
-      toast.error('❌ Failed to save category');
-    }
-  };
-
-  const handleEdit = (category) => {
-    setForm({ name: category.name });
-    setEditId(category.id);
+    } catch { toast.error('❌ Failed to save category'); }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this category? Profile or product assignments may break.')) return;
+    if (!window.confirm('Delete category? This might break product assignments.')) return;
     try {
       await axiosInstance.delete(`/api/categories/${id}/`);
       toast.success('✅ Category deleted');
       fetchCategories();
-    } catch {
-      toast.error('❌ Failed to delete category');
-    }
+    } catch { toast.error('❌ Failed to delete category'); }
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <SectionTitle>📂 Categories</SectionTitle>
-      <FormContainer>
-        <AdminInput
-          placeholder="Category Name"
-          value={form.name}
-          onChange={e => setForm({ name: e.target.value })}
-        />
-        <ActionRow>
-          <AdminButton onClick={handleSubmit} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-            {editId ? 'Update' : 'Add Category'}
-          </AdminButton>
-          {editId && (
-            <AdminButton
-              onClick={() => {
-                setEditId(null);
-                setForm({ name: '' });
-              }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              style={{ background: '#f39c12' }}
-            >
-              Cancel
-            </AdminButton>
-          )}
-        </ActionRow>
-      </FormContainer>
-      <ul style={{ marginTop: '1rem', padding: 0, listStyle: 'none' }}>
+      <SectionTitle>
+        <span>📂 Manage Categories</span>
+        <AddNewButton onClick={() => handleOpenModal()} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <FaPlus /> Add Category
+        </AddNewButton>
+      </SectionTitle>
+
+      <ul style={{ padding: 0, listStyle: 'none' }}>
         {categories.map(c => (
-          <ListItem key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{c.name}</div>
+          <ListItem key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#333' }}>{c.name}</div>
             <ActionRow>
-              <AdminButton onClick={() => handleEdit(c)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ background: '#3498db' }}>Edit</AdminButton>
-              <DeleteButton onClick={() => handleDelete(c.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>Delete</DeleteButton>
+              <ActionButton $bg="#3498db" onClick={() => handleOpenModal(c)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><FaEdit/> Edit</ActionButton>
+              <ActionButton $bg="#e74c3c" onClick={() => handleDelete(c.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><FaTrash/> Delete</ActionButton>
             </ActionRow>
           </ListItem>
         ))}
       </ul>
+
+      <AnimatePresence>
+        {isModalOpen && (
+          <ModalOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsModalOpen(false)}>
+            <ModalCard initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} onClick={e => e.stopPropagation()}>
+              <CloseButton onClick={() => setIsModalOpen(false)}><FaTimes /></CloseButton>
+              <h3 style={{ margin: '0 0 1.5rem 0', color: '#2c3e50', fontSize: '1.4rem' }}>{editId ? 'Update Category' : 'Add Category'}</h3>
+              <AdminInput placeholder="Enter Category Name" value={form.name} onChange={e => setForm({ name: e.target.value })} autoFocus />
+              <SaveButton onClick={handleSubmit} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                {editId ? 'Save Changes' : 'Create Category'}
+              </SaveButton>
+            </ModalCard>
+          </ModalOverlay>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
