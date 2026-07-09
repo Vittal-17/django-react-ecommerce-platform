@@ -288,10 +288,24 @@ const ProductCard = styled(motion.div)`
 `;
 
 const ProductImage = styled.div`
-  width: 100%; height: 220px; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 8px; border-radius: 12px; margin-bottom: 0.75rem; overflow: hidden;
-  img { width: 100%; height: 100%; object-fit: contain; transition: transform .3s ease; }
-  &:hover img { transform: scale(1.03); }
-  @media (max-width: 480px) { height: 240px; }
+  width: 100%;
+  aspect-ratio: 1 / 1; // This is the secret sauce
+  height: auto;        // Let the height be determined by the width
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 12px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+
+  img { 
+    width: 100%;
+    height: 100%;
+    object-fit: contain; // Keeps the whole product visible
+    display: block;      // Kills extra space
+  }
 `;
 
 const ProductInfo = styled.div`

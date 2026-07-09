@@ -1,4 +1,19 @@
 /* src/App.css */
+
+/* --- Global Resets & Typography --- */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a, button {
+  cursor: pointer;
+}
+
+/* --- Navbar Scoped Styles --- */
 .navbar {
   background-color: #222;
   color: white;
@@ -12,10 +27,11 @@
   color: white;
   margin: 0 0.5rem;
   text-decoration: none;
+  transition: color 0.2s ease;
 }
 
 .navbar a:hover {
-  text-decoration: underline;
+  color: #4CAF50; /* Uses your theme green instead of a basic underline */
 }
 
 .navbar-right button {
@@ -23,50 +39,24 @@
   border: none;
   padding: 0.5rem 1rem;
   color: white;
-  cursor: pointer;
   font-weight: bold;
   margin-left: 0.5rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
 }
 
 .navbar-right button:hover {
   background-color: #d32f2f;
 }
 
-/* Ensure proper spacing and prevent content from hiding behind navbar */
-body {
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+/* For specific navbar links if you use this class */
+.navbar-link {
+  transition: all 0.3s ease;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
 }
 
-/* Fix for hover styles in style objects */
-a:hover, button:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* src/index.css */
-body {
-  margin: 0;
-  padding: 0;
-}
-
-/* Ensure links show pointer cursor */
-a, button {
-  cursor: pointer;
-}
-
-.navbar-link:hover, button:hover {
+.navbar-link:hover {
   background-color: rgba(255, 255, 255, 0.1);
   transform: translateY(-2px);
-}
-
-.navbar-link:hover,
-button:hover {
-  background-color: #b2ebf2;
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 6px 12px rgba(0, 191, 255, 0.4);
-}
-
-button:hover {
-  background-color: #005f87;
 }

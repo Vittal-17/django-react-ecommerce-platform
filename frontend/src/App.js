@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import AdminPanel from './pages/AdminPanel';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import ServerWakeup from './components/ServerWakeup';
 import Navbar from './components/Navbar';
 import Wishlist from './pages/Wishlist';
 import OrderSuccess from './pages/OrderSuccess';
@@ -24,7 +25,7 @@ function AppContent() {
   return (
     <>
       <Navbar />
-
+      <ServerWakeup />
       {location.pathname !== '/' && (
         <div style={{ paddingTop: '80px' }} />
       )}
