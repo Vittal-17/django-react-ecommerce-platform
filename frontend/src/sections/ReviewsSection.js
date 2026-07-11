@@ -1,68 +1,18 @@
 import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FaStar, FaTrash } from 'react-icons/fa';
 import AuthContext from '../context/AuthContext';
 import { toast } from "react-hot-toast";
-
-const SectionTitle = styled.h2`
-  color: #2e7d32;
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
-`;
-
-const ListItem = styled(motion.li)`
-  background: #ffffff;
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin-bottom: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05);
-  border: 1px solid #e8f5e9;
-  
-  @media (min-width: 768px) {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-`;
-
-const ReviewDetails = styled.div`
-  flex: 1;
-  min-width: 0;
-`;
-
-const StarsContainer = styled.div`
-  display: flex;
-  gap: 0.2rem;
-  color: #f1c40f;
-  margin-bottom: 0.5rem;
-  font-size: 1.1rem;
-`;
-
-const DeleteButton = styled(motion.button)`
-  padding: 0.6rem 1rem;
-  background: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  white-space: nowrap;
-  
-  &:hover { background: #c0392b; }
-`;
 
 const ReviewsSection = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Delete Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState(null);
 
   const fetchReviews = async () => {
     try {
@@ -81,20 +31,27 @@ const ReviewsSection = () => {
     // eslint-disable-next-line
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this review? It cannot be recovered.')) return;
+  const promptDelete = (id) => {
+    setReviewToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!reviewToDelete) return;
     try {
-      await axiosInstance.delete(`/api/reviews/${id}/`);
+      await axiosInstance.delete(`/api/reviews/${reviewToDelete}/`);
       toast.success('🗑️ Review deleted');
       fetchReviews();
     } catch {
       toast.error('❌ Failed to delete review');
+    } finally {
+      setIsDeleteModalOpen(false);
+      setReviewToDelete(null);
     }
   };
 
-  // Helper to render stars based on rating out of 5
   const renderStars = (rating) => {
-    const validRating = rating || 5; // Fallback to 5 if undefined in older data
+    const validRating = rating || 5; 
     return [...Array(5)].map((_, i) => (
       <FaStar key={i} color={i < validRating ? "#f1c40f" : "#e0e0e0"} />
     ));
@@ -113,30 +70,64 @@ const ReviewsSection = () => {
       ) : (
         <ul style={{ padding: 0, listStyle: 'none' }}>
           {reviews.map(review => (
-            <ListItem key={review.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-              <ReviewDetails>
-                <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
-                  {review.username || 'Anonymous User'}
-                </div>
-                
-                <StarsContainer>
-                  {renderStars(review.rating)}
-                </StarsContainer>
-                
-                <div style={{ fontStyle: 'italic', color: '#555', marginTop: '0.5rem', lineHeight: '1.4' }}>
-                  "{review.comment}"
-                </div>
-              </ReviewDetails>
-              
-              <DeleteButton onClick={() => handleDelete(review.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <FaTrash /> Delete
-              </DeleteButton>
-            </ListItem>
-          ))}
+  <ListItem key={review.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+    <ReviewDetails>
+      <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
+        {review.username || 'Anonymous User'} 
+        <span style={{ color: '#777', fontWeight: 'normal', fontSize: '0.9rem' }}> on </span>
+        {/* THIS IS THE KEY */}
+        <span style={{ color: '#2e7d32' }}>{review.product_name || 'Product'}</span>
+      </div>
+      
+      <StarsContainer>
+        {renderStars(review.rating)}
+      </StarsContainer>
+      
+      <div style={{ fontStyle: 'italic', color: '#555', marginTop: '0.5rem', lineHeight: '1.4' }}>
+        "{review.comment}"
+      </div>
+    </ReviewDetails>
+    
+    <DeleteButton onClick={() => promptDelete(review.id)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <FaTrash /> Delete
+    </DeleteButton>
+  </ListItem>
+))}
         </ul>
       )}
+
+      {/* --- Delete Confirmation Modal --- */}
+      <AnimatePresence>
+        {isDeleteModalOpen && (
+          <ConfirmOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <ConfirmCard initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <h3>Delete Review</h3>
+              <p>Are you sure you want to delete this review? It cannot be recovered.</p>
+              <ButtonGroup>
+                <CancelBtn onClick={() => setIsDeleteModalOpen(false)}>Cancel</CancelBtn>
+                <ConfirmDeleteBtn onClick={executeDelete}>Yes, Delete</ConfirmDeleteBtn>
+              </ButtonGroup>
+            </ConfirmCard>
+          </ConfirmOverlay>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 };
 
 export default ReviewsSection;
+
+// --- Styled Components (No changes needed here, keeping existing) ---
+const SectionTitle = styled.h2` color: #2e7d32; margin-bottom: 1.5rem; font-size: 1.5rem; `;
+const ListItem = styled(motion.li)` background: #ffffff; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05); border: 1px solid #e8f5e9; @media (min-width: 768px) { flex-direction: row; justify-content: space-between; align-items: center; } `;
+const ReviewDetails = styled.div` flex: 1; min-width: 0; `;
+const StarsContainer = styled.div` display: flex; gap: 0.2rem; color: #f1c40f; margin-bottom: 0.5rem; font-size: 1.1rem; `;
+const DeleteButton = styled(motion.button)` padding: 0.6rem 1rem; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; &:hover { background: #c0392b; } `;
+
+// Confirm Modal Styling
+const ConfirmOverlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem; `;
+const ConfirmCard = styled(motion.div)` background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); h3 { margin-top: 0; color: #333; } p { color: #666; margin-bottom: 2rem; } `;
+const ButtonGroup = styled.div` display: flex; gap: 1rem; justify-content: center; `;
+const ConfirmDeleteBtn = styled.button` padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: #d32f2f; color: #ffffff; &:hover { background: #b71c1c; } `;
+const CancelBtn = styled.button` padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: #757575; color: #ffffff; &:hover { background: #616161; } `;

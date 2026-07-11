@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
+import { toast, Toaster } from "react-hot-toast";
 
 // ==========================================
 // CUSTOM CONFIRMATION MODAL
@@ -11,16 +12,8 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <Overlay
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <ModalCard
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-          >
+        <Overlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <ModalCard initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
             <h3>Remove Item</h3>
             <p>Are you sure you want to remove this product from your cart?</p>
             <ButtonGroup>
@@ -41,37 +34,25 @@ const CartQuantityController = ({ itemId, initialQuantity, stockLimit, onQuantit
   const [localQuantity, setLocalQuantity] = useState(initialQuantity);
   const isAtLimit = localQuantity >= stockLimit;
 
-  useEffect(() => {
-    setLocalQuantity(initialQuantity);
-  }, [initialQuantity]);
+  useEffect(() => { setLocalQuantity(initialQuantity); }, [initialQuantity]);
 
   useEffect(() => {
     if (localQuantity === initialQuantity) return;
     const delayDebounceFn = setTimeout(() => {
-      if (localQuantity > 0 && localQuantity <= stockLimit) {
-        onQuantityUpdate(itemId, localQuantity);
-      }
+      if (localQuantity > 0 && localQuantity <= stockLimit) onQuantityUpdate(itemId, localQuantity);
     }, 500);
     return () => clearTimeout(delayDebounceFn);
   }, [localQuantity, itemId, initialQuantity, onQuantityUpdate, stockLimit]);
 
-  const handleIncrement = () => {
-    if (!isAtLimit) setLocalQuantity(prev => Number(prev) + 1);
-  };
+  const handleIncrement = () => { if (!isAtLimit) setLocalQuantity(prev => Number(prev) + 1); };
   const handleDecrement = () => setLocalQuantity(prev => (prev > 1 ? prev - 1 : 1));
-
   const handleManualInput = (e) => {
     const val = e.target.value;
     if (val === '') { setLocalQuantity(''); return; }
     const parsed = parseInt(val, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      setLocalQuantity(Math.min(parsed, stockLimit));
-    }
+    if (!isNaN(parsed) && parsed > 0) setLocalQuantity(Math.min(parsed, stockLimit));
   };
-
-  const handleBlur = () => {
-    if (localQuantity === '' || localQuantity < 1) setLocalQuantity(initialQuantity);
-  };
+  const handleBlur = () => { if (localQuantity === '' || localQuantity < 1) setLocalQuantity(initialQuantity); };
 
   return (
     <QuantityWrapper>
@@ -98,17 +79,20 @@ const Cart = () => {
 
   const fetchCartItems = async () => {
     setLoading(true);
-    try {
-      const res = await axiosInstance.get('/api/cart-items/');
-      setCartItems(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    if (user) {
+      try {
+        const res = await axiosInstance.get('/api/cart-items/');
+        setCartItems(res.data);
+      } catch (err) { console.error(err); }
+    } else {
+      const tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
+      setCartItems(tempCart);
     }
+    setLoading(false);
   };
 
   const fetchWishlist = async () => {
+    if (!user) return;
     try {
       const res = await axiosInstance.get('/api/wishlist/');
       setWishlistIds(res.data.map(item => item.product.id));
@@ -116,36 +100,50 @@ const Cart = () => {
   };
 
   const handleAddToWishlist = async (productId) => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) { 
+      toast.error('Please log in to use your wishlist!', { position: 'bottom-right' });
+      navigate('/login'); 
+      return; 
+    }
     if (wishlistIds.includes(productId)) return;
     try {
       await axiosInstance.post('/api/wishlist/', { product_id: productId });
       setWishlistIds(prev => [...prev, productId]);
+      toast.success('Added to wishlist!', { position: 'bottom-right' });
     } catch (err) { console.error(err); }
   };
 
   const handleQuantityChange = async (id, quantity) => {
-    try {
-      setCartItems(prevItems => prevItems.map(item => item.id === id ? { ...item, quantity } : item));
-      await axiosInstance.patch(`/api/cart-items/${id}/`, { quantity });
-    } catch (err) {
-      fetchCartItems(); 
+    if (user) {
+      try {
+        setCartItems(prevItems => prevItems.map(item => item.id === id ? { ...item, quantity } : item));
+        await axiosInstance.patch(`/api/cart-items/${id}/`, { quantity });
+      } catch (err) { fetchCartItems(); }
+    } else {
+      let tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
+      tempCart = tempCart.map(item => item.id === id ? { ...item, quantity } : item);
+      localStorage.setItem('tempCart', JSON.stringify(tempCart));
+      setCartItems(tempCart);
     }
   };
 
-  // Logic to trigger modal
   const promptRemoveItem = (id) => {
     setItemToRemove(id);
     setIsModalOpen(true);
   };
 
-  // Logic to execute deletion
   const executeRemoveItem = async () => {
-    try {
-      await axiosInstance.delete(`/api/cart-items/${itemToRemove}/`);
-      fetchCartItems();
-    } catch (err) { console.error(err); } 
-    finally {
+    if (user) {
+      try {
+        await axiosInstance.delete(`/api/cart-items/${itemToRemove}/`);
+        fetchCartItems();
+      } catch (err) { console.error(err); } 
+      finally { setIsModalOpen(false); setItemToRemove(null); }
+    } else {
+      let tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
+      tempCart = tempCart.filter(item => item.id !== itemToRemove);
+      localStorage.setItem('tempCart', JSON.stringify(tempCart));
+      setCartItems(tempCart);
       setIsModalOpen(false);
       setItemToRemove(null);
     }
@@ -153,23 +151,29 @@ const Cart = () => {
 
   const handleProceedToCheckout = () => {
     if (cartItems.length === 0) return;
-    navigate(`/checkout/`);
+    if (!user) {
+      toast('🔒 Please log in to checkout your cart!', { style: { background: '#333', color: '#fff' }});
+      
+      // ADDED: { state: { from: '/checkout/' } }
+      // This tells the login page where to send them after success
+      navigate('/login', { state: { from: '/checkout/' } }); 
+    } else {
+      navigate('/checkout/');
+    }
   };
 
   useEffect(() => {
     fetchCartItems();
     fetchWishlist();
-  }, [axiosInstance]);
+    // eslint-disable-next-line
+  }, [axiosInstance, user]);
 
   return (
     <CartContainer>
+      <Toaster />
       <h1>🛒 Your Cart</h1>
 
-      <ConfirmationModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onConfirm={executeRemoveItem}
-      />
+      <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={executeRemoveItem} />
 
       {loading ? (
         <SpinnerContainer><div className="spinner"></div></SpinnerContainer>
@@ -183,12 +187,7 @@ const Cart = () => {
               <ProductDetails>
                 <ProductTitle>{item.product_name}</ProductTitle>
                 <ControlsRow>
-                  <CartQuantityController 
-                    itemId={item.id} 
-                    initialQuantity={item.quantity} 
-                    stockLimit={item.product_stock || 99} 
-                    onQuantityUpdate={handleQuantityChange} 
-                  />
+                  <CartQuantityController itemId={item.id} initialQuantity={item.quantity} stockLimit={item.product_stock || 99} onQuantityUpdate={handleQuantityChange} />
                   <UnitPrice>× ${Number(item.price).toFixed(2)}</UnitPrice>
                 </ControlsRow>
               </ProductDetails>
@@ -223,48 +222,27 @@ const Cart = () => {
 // STYLED COMPONENTS (Retained Responsive Logic)
 // ==========================================
 const Overlay = styled(motion.div)`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 1rem;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
 `;
 const ModalCard = styled(motion.div)`
-  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px;
-  text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   h3 { margin-top: 0; color: #333; } p { color: #666; margin-bottom: 2rem; }
 `;
 const ButtonGroup = styled.div` display: flex; gap: 1rem; justify-content: center; `;
-
 const ConfirmButton = styled.button` 
-  padding: 0.8rem 1.5rem; 
-  border: none !important; 
-  border-radius: 8px; 
-  cursor: pointer; 
-  font-weight: 600; 
-  background: #d32f2f !important; 
-  color: #ffffff !important; 
-  &:hover { background: #d32f2f !important; color: #ffffff !important; }
-  &:active { background: #b71c1c !important; color: #ffffff !important; }
+  padding: 0.8rem 1.5rem; border: none !important; border-radius: 8px; cursor: pointer; font-weight: 600; background: #d32f2f !important; color: #ffffff !important; 
+  &:hover { background: #d32f2f !important; color: #ffffff !important; } &:active { background: #b71c1c !important; color: #ffffff !important; }
 `;
-
 const CancelButton = styled.button` 
-  padding: 0.8rem 1.5rem; 
-  border: none !important; 
-  border-radius: 8px; 
-  cursor: pointer; 
-  font-weight: 600; 
-  background: #757575 !important; 
-  color: #ffffff !important; 
-  &:hover { background: #757575 !important; color: #ffffff !important; }
-  &:active { background: #616161 !important; color: #ffffff !important; }
+  padding: 0.8rem 1.5rem; border: none !important; border-radius: 8px; cursor: pointer; font-weight: 600; background: #757575 !important; color: #ffffff !important; 
+  &:hover { background: #757575 !important; color: #ffffff !important; } &:active { background: #616161 !important; color: #ffffff !important; }
 `;
-
 const CartContainer = styled.div` max-width: 800px; margin: auto; padding: 1rem; h1 { text-align: center; font-size: clamp(1.8rem, 4vw, 2.5rem); margin-bottom: 2rem; } `;
 const SpinnerContainer = styled.div` text-align: center; margin-top: 2rem; `;
 const EmptyMessage = styled.p` text-align: center; font-size: 1.2rem; color: #666; `;
 const CartList = styled.ul` list-style: none; padding: 0; display: flex; flex-direction: column; gap: 1.5rem; `;
 const CartItemCard = styled.li`
-  background: #ffffff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  display: flex; flex-direction: column; align-items: center; gap: 1.5rem; text-align: center;
+  background: #ffffff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: flex; flex-direction: column; align-items: center; gap: 1.5rem; text-align: center;
   @media (min-width: 600px) { flex-direction: row; align-items: center; text-align: left; }
 `;
 const ProductImage = styled.img` width: 100px; height: 100px; object-fit: contain; border-radius: 8px; `;
@@ -275,54 +253,21 @@ const UnitPrice = styled.span` color: #666; font-size: 0.95rem; `;
 const ActionColumn = styled.div` display: flex; flex-direction: column; align-items: center; gap: 0.8rem; width: 100%; @media (min-width: 600px) { align-items: flex-end; width: auto; } `;
 const TotalPrice = styled.strong` font-size: 1.2rem; color: #1b5e20; `;
 const RemoveButton = styled.button` 
-  background: #ff4d4d !important; 
-  color: #ffffff !important; 
-  border: none !important; 
-  padding: 0.5rem 1.2rem; 
-  border-radius: 6px; 
-  cursor: pointer; 
-  font-weight: bold; 
-  width: 100%;
-  &:hover { background: #ff4d4d !important; color: #ffffff !important; }
-  &:active { background: #e60000 !important; color: #ffffff !important; }
-  @media (min-width: 600px) { width: auto; }
+  background: #ff4d4d !important; color: #ffffff !important; border: none !important; padding: 0.5rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;
+  &:hover { background: #ff4d4d !important; color: #ffffff !important; } &:active { background: #e60000 !important; color: #ffffff !important; } @media (min-width: 600px) { width: auto; }
 `;
-
 const WishlistButton = styled.button` background: none; border: none; cursor: ${props => props.disabled ? 'default' : 'pointer'}; font-size: 1.5rem; `;
 const CheckoutSection = styled.div` margin-top: 2rem; text-align: right; border-top: 2px solid #eee; padding-top: 1.5rem; h3 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; } `;
 const CheckoutButton = styled.button` 
-  width: 100%; 
-  padding: 1rem; 
-  background: #4caf50 !important; 
-  color: #ffffff !important; 
-  border: none !important; 
-  border-radius: 8px; 
-  cursor: pointer; 
-  font-size: 1.1rem; 
-  font-weight: bold;
-  &:hover { background: #4caf50 !important; color: #ffffff !important; }
-  &:active { background: #388e3c !important; color: #ffffff !important; }
-  @media (min-width: 600px) { width: auto; padding: 1rem 2.5rem; }
+  width: 100%; padding: 1rem; background: #4caf50 !important; color: #ffffff !important; border: none !important; border-radius: 8px; cursor: pointer; font-size: 1.1rem; font-weight: bold;
+  &:hover { background: #4caf50 !important; color: #ffffff !important; } &:active { background: #388e3c !important; color: #ffffff !important; } @media (min-width: 600px) { width: auto; padding: 1rem 2.5rem; }
 `;
 const QuantityWrapper = styled.div` display: flex; align-items: center; gap: 4px; `;
 const QuantityInput = styled.input` width: 50px; text-align: center; padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; font-weight: bold; `;
 const ControlButton = styled.button`
-  border: none !important; 
-  padding: 0.4rem 0.6rem; 
-  border-radius: 6px; 
-  font-size: 0.8rem; 
-  color: #ffffff !important; 
-  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
-  background: ${props => { 
-    if (props.$variant === 'decrement') return props.$disabled ? '#ffb3b3 !important' : '#ff4d4d !important'; 
-    return props.$disabled ? '#a5d6a7 !important' : '#4caf50 !important'; 
-  }};
-  &:hover { 
-    background: ${props => { 
-        if (props.$variant === 'decrement') return props.$disabled ? '#ffb3b3 !important' : '#ff4d4d !important'; 
-        return props.$disabled ? '#a5d6a7 !important' : '#4caf50 !important'; 
-    }};
-  }
+  border: none !important; padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.8rem; color: #ffffff !important; cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
+  background: ${props => { if (props.$variant === 'decrement') return props.$disabled ? '#ffb3b3 !important' : '#ff4d4d !important'; return props.$disabled ? '#a5d6a7 !important' : '#4caf50 !important'; }};
+  &:hover { background: ${props => { if (props.$variant === 'decrement') return props.$disabled ? '#ffb3b3 !important' : '#ff4d4d !important'; return props.$disabled ? '#a5d6a7 !important' : '#4caf50 !important'; }}; }
 `;
 
 export default Cart;

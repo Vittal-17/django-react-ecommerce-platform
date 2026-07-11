@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useContext } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import {toast, Toaster} from "react-hot-toast";
-
+import { toast, Toaster } from "react-hot-toast";
+import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
+
 const API_URL = process.env.REACT_APP_API_URL;
+
 // Styled Components
 const RegisterContainer = styled.div`
   display: flex;
@@ -111,13 +113,18 @@ const RuleIcon = styled.span`
 `;
 
 const Register = () => {
+  const { loginUser } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
+
   const [form, setForm] = useState({ 
     username: '', 
     email: '', 
     password: '', 
     password2: '' 
   });
+  
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordRules, setShowPasswordRules] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -150,10 +157,11 @@ const Register = () => {
         length: form.password.length >= 8,
         notNumeric: !/^\d+$/.test(form.password),
         notSimilar: !form.password.toLowerCase().includes(form.username.toLowerCase()) && 
-                   !form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase()),
+                    !form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase()),
         matches: form.password === form.password2 && form.password2 !== ''
       });
     }
+    // eslint-disable-next-line
   }, [form.password, form.password2, passwordFocused]);
 
   const handleSubmit = async (e) => {
@@ -184,11 +192,20 @@ const Register = () => {
     try {
       const res = await axios.post(`${API_URL}/api/register/`, form);
       if (res.status === 201) {
-        toast.success('✅Registration successful! Redirecting to login...', {
+        toast.success('✅ Registration successful! Logging you in...', {
           position: "top-center",
           duration: 2000,
         });
-        setTimeout(() => navigate('/login'), 2000);
+        
+        // Use form.email and form.password to fix the ESLint error
+        const loginSuccess = await loginUser(form.email, form.password);
+        
+        // Wait for the toast, then redirect to their original destination
+        if (loginSuccess) {
+            setTimeout(() => navigate(from), 2000);
+        } else {
+            setTimeout(() => navigate('/login', { state: { from } }), 2000);
+        }
       }
     } catch (err) {
       let errorMessage = 'Registration failed';
@@ -316,7 +333,7 @@ const Register = () => {
         </form>
         
         <LoginLink>
-          Already have an account? <Link to="/login">Login now</Link>
+          Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
         </LoginLink>
       </RegisterCard>
       <Toaster />

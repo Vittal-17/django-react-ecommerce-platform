@@ -177,10 +177,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
 
     class Meta:
         model = Review
-        fields = ['id', 'product', 'rating', 'comment', 'created_at', 'username']
+        fields = ['id', 'product', 'product_name' , 'rating', 'comment', 'created_at', 'username']
         read_only_fields = ['user']
 
 class WishlistSerializer(serializers.ModelSerializer):

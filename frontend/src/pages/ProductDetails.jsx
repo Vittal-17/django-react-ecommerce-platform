@@ -1,11 +1,12 @@
 import { useEffect, useState, useContext } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import styled from 'styled-components';
+// eslint-disable-next-line
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
-import {toast, Toaster} from "react-hot-toast";
-import { FaStar } from 'react-icons/fa';
+import { toast, Toaster } from "react-hot-toast";
+import { FaStar, FaShoppingCart, FaArrowRight } from 'react-icons/fa';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -38,15 +39,88 @@ const ProductDetail = () => {
       });
   }, [id, axiosInstance]);
 
+  // Determine if quantity is at maximum stock
+  const isAtLimit = product && quantity >= (product.stock || 0);
+
   const handleAddToCart = async () => {
-    try {
-      await axiosInstance.post('/api/cart-items/', {
-        product: id,
-        quantity,
-      });
-      toast.success('🛒 Added to cart!', { position: 'bottom-right' });
-    } catch (err) {
-      toast.error('❌ Failed to add to cart.', { position: 'bottom-right' });
+    if (quantity > (product.stock || 0)) {
+      toast.error(`Only ${product.stock} in stock!`, { position: "bottom-right", duration: 2000 });
+      return;
+    }
+
+    if (user) {
+      // Logged In: Send to backend
+      try {
+        await axiosInstance.post('/api/cart-items/', {
+          product: id,
+          quantity,
+        });
+        
+        toast.success(
+          (t) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span>🛒 <b>{product.name}</b> added to cart!</span>
+              <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#2e7d32', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>
+                Go to Cart <FaArrowRight size={12} />
+              </Link>
+            </div>
+          ), { position: "bottom-right", duration: 5000 }
+        );
+      } catch (err) {
+        const serverMessage = err.response?.data?.non_field_errors?.[0] || err.response?.data?.error || err.response?.data?.detail;
+        
+        if (serverMessage && serverMessage.toLowerCase().includes('already')) {
+          // The beautiful Custom Error Toast with "Go to Cart" link
+          toast(
+            (t) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span>⚠️ <b>{product.name}</b> is already in your cart.</span>
+                <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#2e7d32', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>
+                  Go to Cart <FaArrowRight size={12} />
+                </Link>
+              </div>
+            ), { position: "bottom-right", duration: 5000 }
+          );
+        } else {
+          // Standard fallback error
+          toast.error(`❌ Failed to add ${product.name} to cart.`, { position: "bottom-right", duration: 3000 });
+        }
+      }
+    } else {
+      // Logged Out: Save to LocalStorage Temp Cart
+      let tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
+      const existingIndex = tempCart.findIndex(item => String(item.product) === String(id));
+      
+      if (existingIndex >= 0) {
+        if (tempCart[existingIndex].quantity + quantity > (product.stock || 0)) {
+          toast.error(`Cannot exceed stock limit of ${product.stock}`, { position: "bottom-right" });
+          return;
+        }
+        tempCart[existingIndex].quantity += quantity;
+      } else {
+        tempCart.push({
+          id: `temp_${id}`,
+          product: id,
+          product_name: product.name,
+          product_image: product.image_url,
+          price: product.price,
+          quantity: quantity,
+          product_stock: product.stock || 0
+        });
+      }
+      
+      localStorage.setItem('tempCart', JSON.stringify(tempCart));
+      
+      toast.success(
+        (t) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span>🛒 <b>{product.name}</b> added to guest cart!</span>
+            <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#2e7d32', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>
+              Go to Cart <FaArrowRight size={12} />
+            </Link>
+          </div>
+        ), { position: "bottom-right", duration: 5000 }
+      );
     }
   };
 
@@ -93,48 +167,29 @@ const ProductDetail = () => {
   return (
     <DetailContainer>
       <Toaster />
-      <motion.h1
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         {product.name}
       </motion.h1>
 
       <ProductWrapper>
-        <motion.img
-          src={product.image_url}
-          alt={product.name}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        />
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
+        <motion.img src={product.image_url} alt={product.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} />
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           {product.description}
         </motion.p>
       </ProductWrapper>
 
-      <div style={{ marginTop: '1rem' }}>
-        <label>Quantity:</label>
-        <QuantitySelector
-          type="number"
-          min="1"
-          value={quantity}
-          onChange={e => setQuantity(parseInt(e.target.value))}
-        />
-        <SubmitButton
-          onClick={handleAddToCart}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          style={{ marginLeft: '1rem', width: 'auto' }}
-        >
-          Add to Cart
-        </SubmitButton>
-      </div>
+      <ActionArea>
+        <QuantityControl>
+          <button onClick={() => setQuantity(prev => Math.max(1, prev - 1))} disabled={quantity <= 1}>-</button>
+          <span>{quantity}</span>
+          <button disabled={isAtLimit} onClick={() => setQuantity(prev => Math.min(product.stock || 0, prev + 1))} style={{ opacity: isAtLimit ? 0.5 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
+        </QuantityControl>
+        {isAtLimit && <LimitWarning>Only {product.stock} left in stock!</LimitWarning>}
+        
+        <AddToCartButton onClick={handleAddToCart} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <FaShoppingCart /> Add to Cart
+        </AddToCartButton>
+      </ActionArea>
 
       <ReviewSection>
         <h2>Leave a Review</h2>
@@ -143,34 +198,14 @@ const ProductDetail = () => {
             const starValue = i + 1;
             return (
               <label key={i}>
-                <input
-                  type="radio"
-                  name="rating"
-                  value={starValue}
-                  onClick={() => setRating(starValue)}
-                />
-                <FaStar
-                  size={28}
-                  color={starValue <= (hover || rating) ? '#ffc107' : '#e4e5e9'}
-                  onMouseEnter={() => setHover(starValue)}
-                  onMouseLeave={() => setHover(null)}
-                />
+                <input type="radio" name="rating" value={starValue} onClick={() => setRating(starValue)} />
+                <FaStar size={28} color={starValue <= (hover || rating) ? '#ffc107' : '#e4e5e9'} onMouseEnter={() => setHover(starValue)} onMouseLeave={() => setHover(null)} />
               </label>
             );
           })}
         </Stars>
-        <textarea
-          placeholder="Write your review here..."
-          value={comment}
-          onChange={e => setComment(e.target.value)}
-        />
-        <SubmitButton
-          onClick={submitReview}
-          disabled={submitting}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          style={{ width: 'auto' }}
-        >
+        <textarea placeholder="Write your review here..." value={comment} onChange={e => setComment(e.target.value)} />
+        <SubmitButton onClick={submitReview} disabled={submitting} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ width: 'auto' }}>
           Submit Review
         </SubmitButton>
       </ReviewSection>
@@ -184,11 +219,7 @@ const ProductDetail = () => {
             <div key={review.id} style={{ marginBottom: '1.5rem' }}>
               <strong>{review.username}</strong> –{' '}
               {Array.from({ length: 5 }, (_, i) => (
-                <FaStar
-                  key={i}
-                  size={16}
-                  color={i < review.rating ? '#ffc107' : '#e4e5e9'}
-                />
+                <FaStar key={i} size={16} color={i < review.rating ? '#ffc107' : '#e4e5e9'} />
               ))}
               <p>{review.comment}</p>
               {user?.username === review.username && (
@@ -215,124 +246,42 @@ export default ProductDetail;
 
 // Styled components
 const DetailContainer = styled.div`
-  padding: 2rem;
-  max-width: 800px;
-  margin: 0 auto;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
-  min-height: 100vh;
-
-  h1 {
-    text-align: center;
-    color: #2e7d32;
-    margin-bottom: 2rem;
-  }
+  padding: 2rem; max-width: 800px; margin: 0 auto; background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%); min-height: 100vh;
+  h1 { text-align: center; color: #2e7d32; margin-bottom: 2rem; }
 `;
 
 const ProductWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: flex; flex-direction: column; align-items: center;
+  img { width: 100%; max-width: 400px; border-radius: 16px; margin-bottom: 1.5rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2); }
+  p { font-size: 1.1rem; color: #424242; text-align: center; line-height: 1.6; }
+`;
 
-  img {
-    width: 100%;
-    max-width: 400px;
-    border-radius: 16px;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
-  }
+const ActionArea = styled.div`
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.5rem;
+`;
 
-  p {
-    font-size: 1.1rem;
-    color: #424242;
-    text-align: center;
-    line-height: 1.6;
-  }
+const QuantityControl = styled.div`
+  display: flex; align-items: center; gap: 0.8rem;
+  button { background: #e8f5e9 !important; color: #2e7d32 !important; border: none; padding: 0.4rem 1rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: all 0.2s ease; &:hover:not(:disabled) { background: #c8e6c9 !important; } }
+  span { min-width: 30px; text-align: center; font-size: 1.1rem; font-weight: bold; }
+`;
+
+const LimitWarning = styled.p` color: #d32f2f !important; font-size: 0.85rem !important; margin: -0.5rem 0 0 0 !important; font-weight: 600; text-align: center; `;
+
+const AddToCartButton = styled(motion.button)`
+  padding: 0.8rem 2.5rem; background: #4CAF50 !important; color: #ffffff !important; border: none; border-radius: 12px; font-weight: 600; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.6rem; transition: background-color 0.3s ease;
+  &:hover { background: #388e3c !important; color: #ffffff !important; } &:active { background: #2e7d32 !important; color: #ffffff !important; }
 `;
 
 const ReviewSection = styled.div`
-  margin-top: 3rem;
-  padding: 2rem;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.1);
-
-  h2 {
-    color: #2e7d32;
-    margin-bottom: 1rem;
-    text-align: center;
-  }
-
-  textarea {
-    width: 100%;
-    height: 120px;
-    border: 2px solid #c8e6c9;
-    border-radius: 12px;
-    padding: 1rem;
-    font-size: 1rem;
-    margin-top: 1rem;
-    resize: none;
-
-    &:focus {
-      outline: none;
-      border-color: #4caf50;
-    }
-  }
+  margin-top: 3rem; padding: 2rem; background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.1);
+  h2 { color: #2e7d32; margin-bottom: 1rem; text-align: center; }
+  textarea { width: 100%; height: 120px; border: 2px solid #c8e6c9; border-radius: 12px; padding: 1rem; font-size: 1rem; margin-top: 1rem; resize: none; &:focus { outline: none; border-color: #4caf50; } }
 `;
 
-const Stars = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
-
-  input {
-    display: none;
-  }
-
-  svg {
-    cursor: pointer;
-    transition: color 200ms;
-  }
-`;
-
-const QuantitySelector = styled.input`
-  width: 60px;
-  padding: 0.5rem;
-  border-radius: 8px;
-  border: 2px solid #c8e6c9;
-  margin-left: 0.5rem;
-  font-size: 1rem;
-  text-align: center;
-  transition: border 0.3s ease;
-
-  &:hover {
-    border-color: #4caf50;
-  }
-
-  &:focus {
-    outline: none;
-    border-color: #4caf50;
-  }
-`;
+const Stars = styled.div` display: flex; justify-content: center; margin-bottom: 1rem; input { display: none; } svg { cursor: pointer; transition: color 200ms; } `;
 
 const SubmitButton = styled(motion.button)`
-  width: auto;
-  padding: 0.8rem 1.5rem;
-  background: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  margin-top: 1rem;
-  transition: background 0.3s ease;
-
-  &:hover {
-    background: #388e3c;
-  }
-
-  &:disabled {
-    background: #a5d6a7;
-    cursor: not-allowed;
-  }
+  width: auto; padding: 0.8rem 1.5rem; background: #4caf50; color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 1rem; transition: background 0.3s ease;
+  &:hover { background: #388e3c; } &:disabled { background: #a5d6a7; cursor: not-allowed; }
 `;

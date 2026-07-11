@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link , useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {toast, Toaster} from "react-hot-toast";
 import styled from 'styled-components';
+
 
 const Login = () => {
   const { loginUser } = useContext(AuthContext);
@@ -12,6 +13,8 @@ const Login = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,7 +42,7 @@ const Login = () => {
         });
 
         setTimeout(() => {
-  navigate("/");
+  navigate(from);
 }, 2000);
 
 
@@ -117,7 +120,7 @@ const Login = () => {
         )}
 
         <RegisterLink>
-          Don't have an account? <Link to="/register">Register now</Link>
+          Don't have an account? <Link to="/register" state={{ from }}>Register now</Link>
         </RegisterLink>
       </LoginCard>
     </LoginContainer>
