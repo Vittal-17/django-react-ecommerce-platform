@@ -1,13 +1,19 @@
 from django.contrib import admin
-from .models import *
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+# Explicit imports are safer than *
+from .models import (
+    User, Category, Product, Order, OrderItem, 
+    Review, Wishlist, Coupon, Payment, AdminLog, 
+    Cart, CartItem, Address
+)
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ('username', 'email', 'role', 'is_staff', 'is_active')
     list_filter = ('role', 'is_staff', 'is_superuser')
+    # Custom fieldsets ensure we don't break the default UserAdmin
     fieldsets = BaseUserAdmin.fieldsets + (
-        (None, {'fields': ('role', 'address', 'phone')}),
+        (None, {'fields': ('role', 'phone')}),
     )
 
 @admin.register(Category)
@@ -23,13 +29,18 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'created_at')
-    list_filter = ('status',)
-    search_fields = ('user__username',)
+    list_display = ('id', 'user', 'total_price', 'status', 'created_at', 'contact_phone')
+    list_filter = ('status', 'created_at')
+    search_fields = ('user__username', 'shipping_address')
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
     list_display = ('order', 'product', 'quantity', 'price')
+
+@admin.register(Address)
+class AddressAdmin(admin.ModelAdmin):
+    list_display = ('user', 'label', 'full_address', 'is_default')
+    list_filter = ('is_default',)
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
@@ -48,6 +59,7 @@ class CouponAdmin(admin.ModelAdmin):
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ('order', 'payment_method', 'amount', 'status', 'created_at')
+    list_filter = ('status', 'payment_method')
 
 @admin.register(AdminLog)
 class AdminLogAdmin(admin.ModelAdmin):
