@@ -23,6 +23,8 @@ from .serializers import (
     CouponSerializer, PaymentSerializer, AdminLogSerializer,AddressSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
+from .utils import log_admin_action
+import threading
 
 
 # ==========================================
@@ -53,33 +55,35 @@ class UserViewSet(viewsets.ModelViewSet):
             return ChangePasswordSerializer
         return UserSerializer
 
-    @action(detail=False, methods=['get'], url_path='me', permission_classes=[IsAuthenticated])
-    def me(self, request):
-        serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['put'], url_path='change-password', permission_classes=[IsAuthenticated])
-    def change_password(self, request):
-        serializer = self.get_serializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        user = request.user
-        user.set_password(serializer.validated_data['new_password'])
-        user.save()
-        return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
+    # --- THREADED EMAIL HELPER ---
+    def _send_otp_email_async(self, email, username, otp_code):
+        try:
+            send_mail(
+                subject="Your ShopEazy Security Code",
+                message=f"Hello {username},\n\nYou requested to update your profile. Your verification code is: {otp_code}\n\nThis code expires in 5 minutes.",
+                from_email="updates.eazyshop@gmail.com",
+                recipient_list=[email],
+                fail_silently=True, # Critical: Prevents crashing the worker if SMTP fails
+            )
+            print(f"[EMAIL LOG] ✅ OTP sent to {email}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] ❌ Failed to send OTP email: {str(e)}")
 
     @action(detail=False, methods=['post'], url_path='request-otp', permission_classes=[IsAuthenticated])
     def request_otp(self, request):
         user = request.user
         otp_code = str(random.randint(100000, 999999))
+        
+        # Save to cache
         cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
         
-        send_mail(
-            subject="Your ShopEazy Security Code",
-            message=f"Hello {user.username},\n\nYou requested to update your profile. Your verification code is: {otp_code}\n\nThis code expires in 5 minutes.",
-            from_email="updates.eazyshop@gmail.com",
-            recipient_list=[user.email],
-            fail_silently=False,
+        # Fire email in background thread to avoid Worker Timeout (SIGKILL)
+        thread = threading.Thread(
+            target=self._send_otp_email_async, 
+            args=(user.email, user.username, otp_code)
         )
+        thread.start()
+        
         return Response({"message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
@@ -87,45 +91,41 @@ class UserViewSet(viewsets.ModelViewSet):
         if request.user.id != instance.id:
             return Response({"error": "Unauthorized action."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 1. Extract the submitted OTP from the frontend payload
+        # 1. Extract OTP
         submitted_otp = request.data.get('otp')
         if not submitted_otp:
             return Response({"error": "OTP verification code is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Fetch the true OTP from the Django cache
+        # 2. Validate OTP
         cached_otp = cache.get(f"profile_otp_{request.user.id}")
-
-        # ---> 🚨 TERMINAL DEBUG LOGGER 🚨 <---
+        
         print(f"\n[SECURITY LOG] User: {request.user.username}")
         print(f"[SECURITY LOG] Server Expected: {cached_otp}")
-        print(f"[SECURITY LOG] User Submitted : {submitted_otp}\n")
+        print(f"[SECURITY LOG] User Submitted: {submitted_otp}\n")
 
-        # 3. Validate the code (Using .strip() to protect against accidental spaces)
         if not cached_otp or str(cached_otp).strip() != str(submitted_otp).strip():
             return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Handle optional password update
+        # 3. Handle optional password update (Logic is safe here)
         password = request.data.get('password')
         if password:
             instance.set_password(password)
             instance.save()
 
-        # 5. Execute the Database Update FIRST 
-        # (If this fails due to a phone number formatting error, execution stops here and the OTP is kept safe!)
-        response = super().update(request, *args, **kwargs)
+        # 4. Perform Update
+        # Note: We must ensure the serializer has access to the data
+        try:
+            response = super().update(request, *args, **kwargs)
+        except Exception as e:
+            print(f"[UPDATE ERROR] Serialization failed: {str(e)}")
+            return Response({"error": "Profile update failed."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 6. ONLY destroy the OTP if the database successfully saved!
+        # 5. Destroy OTP only on success
         if response.status_code == 200:
             cache.delete(f"profile_otp_{request.user.id}")
             print(f"[SECURITY LOG] ✅ Profile updated. OTP securely destroyed.")
 
         return response
-
-    # Track if an admin deletes a user
-    def perform_destroy(self, instance):
-        username = instance.username
-        instance.delete()
-        log_admin_action(self.request.user, f"Deleted user account: '{username}'")
 
 
 class AddressViewSet(viewsets.ModelViewSet):
