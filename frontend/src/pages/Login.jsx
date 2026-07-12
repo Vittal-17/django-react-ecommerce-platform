@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
 import { useNavigate, Link , useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+// eslint-disable-next-line
 import {toast, Toaster} from "react-hot-toast";
 import styled from 'styled-components';
 
@@ -23,7 +24,6 @@ const Login = () => {
 
     if (!email || !password) {
       toast.error("❌ Please fill in all fields", { 
-        position: "top-center",
         duration: 3000,
         id: 'empty-fields'
       });
@@ -36,7 +36,6 @@ const Login = () => {
 
       if (success === true) {
         toast.success('✅ Login successful! Redirecting...', {
-          position: "bottom-right",
           duration: 2000,
           id: 'login-success',
         });
@@ -49,14 +48,12 @@ const Login = () => {
       } else if (typeof success === 'object') {
         const messages = Object.values(success).flat().join(' ');
         toast.error(messages || '❌ Login failed', {
-          position: "bottom-right",
           duration: 3000,
           id: 'login-error'
         });
         setErrorMsg(messages);
       } else {
         toast.error('❌ Invalid credentials', {
-          position: "top-center",
           duration: 3000,
           id: 'invalid-creds'
         });
@@ -64,7 +61,6 @@ const Login = () => {
       }
     } catch (err) {
       toast.error('❌ An unexpected error occurred', {
-        position: "top-center",
         duration: 3000,
         id: 'unexpected-error'
       });
@@ -76,7 +72,7 @@ const Login = () => {
 
   return (
     <LoginContainer>
-      <Toaster />
+      
       <LoginCard
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

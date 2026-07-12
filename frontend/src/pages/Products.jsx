@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
 import { FaSearch, FaShoppingCart, FaArrowRight } from 'react-icons/fa';
+// eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
 import { Link } from 'react-router-dom';
 
@@ -41,7 +42,7 @@ const Products = () => {
       .then(res => setCategories(res.data))
       .catch(err => {
         console.error(err);
-        toast.error('❌ Failed to load categories.', { position: "bottom-right", duration: 2000 });
+        toast.error('❌ Failed to load categories.', {duration: 2000 });
       });
   }, [axiosInstance]);
 
@@ -58,7 +59,7 @@ const Products = () => {
     const qty = quantities[product.id] || 1;
     
     if (qty > product.stock) {
-      toast.error(`Only ${product.stock} in stock!`, { position: "bottom-right", duration: 2000 });
+      toast.error(`Only ${product.stock} in stock!`, {duration: 2000 });
       return;
     }
 
@@ -78,7 +79,7 @@ const Products = () => {
                 Go to Cart <FaArrowRight size={12} />
               </Link>
             </div>
-          ), { position: "bottom-right", duration: 5000 }
+          ), {duration: 5000 }
         );
       } catch (err) {
         const serverMessage = err.response?.data?.non_field_errors?.[0] || err.response?.data?.error || err.response?.data?.detail;
@@ -97,7 +98,7 @@ const Products = () => {
           );
         } else {
           // Standard fallback error
-          toast.error(`❌ Failed to add ${product.name} to cart.`, { position: "bottom-right", duration: 3000 });
+          toast.error(`❌ Failed to add ${product.name} to cart.`, {duration: 3000 });
         }
       }
     } else {
@@ -133,14 +134,14 @@ const Products = () => {
               Go to Cart <FaArrowRight size={12} />
             </Link>
           </div>
-        ), { position: "bottom-right", duration: 5000 }
+        ), {duration: 5000 }
       );
     }
   };
 
   return (
     <ProductsContainer>
-      <Toaster />
+      
       <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         Our Products
       </motion.h1>
@@ -201,9 +202,14 @@ const Products = () => {
 
 // --- STYLED COMPONENTS ---
 const ProductsContainer = styled.div`
-  padding: 2rem; max-width: 1200px; margin: 0 auto; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+  padding: 7rem 2rem 2rem 2rem; 
+  max-width: 1200px; margin: 0 auto; min-height: 100vh; 
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
   h1 { color: #2e7d32; text-align: center; margin-bottom: 2rem; font-size: 2.2rem; }
-  @media (max-width: 600px) { padding: 1rem 0.75rem; h1 { font-size: 1.75rem; margin-bottom: 1.25rem; } }
+  @media (max-width: 600px) { 
+    padding: 6rem 0.75rem 1rem 0.75rem; 
+    h1 { font-size: 1.75rem; margin-bottom: 1.25rem; } 
+  }
 `;
 const FilterContainer = styled.div`
   display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; align-items: center; width: 100%;

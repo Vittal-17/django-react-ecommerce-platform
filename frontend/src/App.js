@@ -1,5 +1,4 @@
-// src/App.js
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import './App.css';
@@ -18,17 +17,28 @@ import ServerWakeup from './components/ServerWakeup';
 import Navbar from './components/Navbar';
 import Wishlist from './pages/Wishlist';
 import OrderSuccess from './pages/OrderSuccess';
+import AppToaster from './components/AppToaster';
+
+// --- ADDED: ScrollToTop Component ---
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
 
 function AppContent() {
-  const location = useLocation();
-
   return (
     <>
+      {/* MOUNTED HERE: Will silently intercept route changes and snap to top */}
+      <ScrollToTop />
+      
+      <AppToaster/>
       <Navbar />
       <ServerWakeup />
-      {location.pathname !== '/' && (
-        <div style={{ paddingTop: '80px' }} />
-      )}
 
       <Routes>
         <Route path="/" element={<Layout />} />

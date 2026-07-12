@@ -71,12 +71,6 @@ export const AuthProvider = ({ children }) => {
           
           toast.error('⏳ Session Expired, Please Log in Again', {
             duration: 4000,
-            style: {
-              borderRadius: '10px',
-              background: '#333',
-              color: '#fff',
-              fontWeight: 'bold',
-            },
           });
           
           navigate('/login');

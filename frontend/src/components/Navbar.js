@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import { useForm } from 'react-hook-form';
+// eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
 
 const Navbar = () => {
@@ -39,7 +40,9 @@ const Navbar = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line
     if (user && isDropdownOpen) fetchUserDetails();
+    // eslint-disable-next-line
   }, [isDropdownOpen, user]);
 
   useEffect(() => {
@@ -148,7 +151,7 @@ const Navbar = () => {
 
   return (
     <>
-      <Toaster position="bottom-right" toastOptions={{ duration: 2000 }} />
+      
       
       {/* Changing NavContainer to a div instead of a nav, and using a CSS column layout
         allows the expanding mobile menu to stay structurally sound below the top bar 

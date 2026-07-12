@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
+// eslint-disable-next-line
 import toast, { Toaster } from "react-hot-toast";
 import AuthContext from '../context/AuthContext';
 
@@ -11,7 +12,7 @@ import OrdersSection from '../sections/OrdersSection';
 import ReviewsSection from '../sections/ReviewsSection';
 
 const AdminContainer = styled.div`
-  padding: 1rem; /* Smaller padding on mobile */
+  padding: 6rem 1rem 1rem 1rem; /* Adjusted for mobile navbar */
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
@@ -20,7 +21,7 @@ const AdminContainer = styled.div`
   background: #f4f7f6; /* Cleaner background */
 
   @media (min-width: 768px) {
-    padding: 2rem;
+    padding: 7rem 2rem 2rem 2rem; /* Adjusted for desktop navbar */
   }
 `;
 
@@ -72,7 +73,9 @@ const SectionWrapper = styled(motion.div)`
 const AdminPanel = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [users, setUsers] = useState([]);
+  // eslint-disable-next-line
   const [products, setProducts] = useState([]);
+  // eslint-disable-next-line
   const [categories, setCategories] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -100,19 +103,16 @@ const AdminPanel = () => {
       console.error('Failed to load admin data', err);
     }
   };
-
+// eslint-disable-next-line
   useEffect(() => {
+    // eslint-disable-next-line
     fetchData();
+    // eslint-disable-next-line
   }, []);
 
   return (
     <AdminContainer>
-      <Toaster
-  position="top-right"
-  toastOptions={{
-    duration: 3000,
-  }}
-/>
+      
 
       <motion.h1 
         initial={{ opacity: 0, y: -20 }}

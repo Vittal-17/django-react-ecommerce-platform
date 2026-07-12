@@ -101,11 +101,16 @@ const SuccessContainer = styled(motion.div)`
   width: 100%;
   border-radius: 24px;
   padding: 3rem 2rem;
+  margin: 7rem auto 2rem auto; /* Pushes the card down from the navbar */
   box-shadow: 0 20px 40px rgba(46, 125, 50, 0.15);
   text-align: center;
   
   h1 { color: #2e7d32; margin-bottom: 0.5rem; font-size: 2.2rem; }
   .subtitle { color: #555; font-size: 1.1rem; margin-bottom: 2rem; }
+
+  @media(max-width: 768px) {
+    margin: 6rem auto 2rem auto;
+  }
 `;
 
 const IconWrapper = styled(motion.div)`

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
+// eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
 
 // ==========================================
@@ -101,7 +102,7 @@ const Cart = () => {
 
   const handleAddToWishlist = async (productId) => {
     if (!user) { 
-      toast.error('Please log in to use your wishlist!', { position: 'bottom-right' });
+      toast.error('Please log in to use your wishlist!');
       navigate('/login'); 
       return; 
     }
@@ -109,7 +110,7 @@ const Cart = () => {
     try {
       await axiosInstance.post('/api/wishlist/', { product_id: productId });
       setWishlistIds(prev => [...prev, productId]);
-      toast.success('Added to wishlist!', { position: 'bottom-right' });
+      toast.success('Added to wishlist!');
     } catch (err) { console.error(err); }
   };
 
@@ -170,7 +171,7 @@ const Cart = () => {
 
   return (
     <CartContainer>
-      <Toaster />
+      
       <h1>🛒 Your Cart</h1>
 
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={executeRemoveItem} />
@@ -237,7 +238,22 @@ const CancelButton = styled.button`
   padding: 0.8rem 1.5rem; border: none !important; border-radius: 8px; cursor: pointer; font-weight: 600; background: #757575 !important; color: #ffffff !important; 
   &:hover { background: #757575 !important; color: #ffffff !important; } &:active { background: #616161 !important; color: #ffffff !important; }
 `;
-const CartContainer = styled.div` max-width: 800px; margin: auto; padding: 1rem; h1 { text-align: center; font-size: clamp(1.8rem, 4vw, 2.5rem); margin-bottom: 2rem; } `;
+const CartContainer = styled.div` 
+  max-width: 800px; 
+  margin: 0 auto; 
+  padding: 7rem 1rem 2rem 1rem; 
+  min-height: 100vh;
+  
+  h1 { 
+    text-align: center; 
+    font-size: clamp(1.8rem, 4vw, 2.5rem); 
+    margin-bottom: 2rem; 
+  } 
+    
+  @media(max-width: 768px) { 
+    padding: 6rem 1rem 1rem 1rem; 
+  } 
+`;
 const SpinnerContainer = styled.div` text-align: center; margin-top: 2rem; `;
 const EmptyMessage = styled.p` text-align: center; font-size: 1.2rem; color: #666; `;
 const CartList = styled.ul` list-style: none; padding: 0; display: flex; flex-direction: column; gap: 1.5rem; `;

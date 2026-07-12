@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+// eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
 import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
@@ -172,7 +173,6 @@ const Register = () => {
     if (passwordErrors.length > 0) {
       passwordErrors.forEach(error => {
         toast.error(error, {
-          position: "top-center",
           duration: 5000,
         });
       });
@@ -182,7 +182,6 @@ const Register = () => {
 
     if (form.password !== form.password2) {
       toast.error("❌ Passwords don't match", {
-        position: "top-center",
         duration: 5000,
       });
       setIsLoading(false);
@@ -193,7 +192,6 @@ const Register = () => {
       const res = await axios.post(`${API_URL}/api/register/`, form);
       if (res.status === 201) {
         toast.success('✅ Registration successful! Logging you in...', {
-          position: "top-center",
           duration: 2000,
         });
         
@@ -219,7 +217,6 @@ const Register = () => {
         }
       }
       toast.error(errorMessage, {
-        position: "top-center",
         duration: 5000,
       });
     } finally {
@@ -336,7 +333,7 @@ const Register = () => {
           Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
         </LoginLink>
       </RegisterCard>
-      <Toaster />
+      
     </RegisterContainer>
   );
 };
