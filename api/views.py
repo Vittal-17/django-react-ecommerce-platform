@@ -25,6 +25,7 @@ from .serializers import (
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
 from .utils import log_admin_action
 import threading
+from .email_service import send_transactional_email
 
 
 # ==========================================
@@ -73,59 +74,56 @@ class UserViewSet(viewsets.ModelViewSet):
     def request_otp(self, request):
         user = request.user
         otp_code = str(random.randint(100000, 999999))
-        
-        # Save to cache
         cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
         
-        # Fire email in background thread to avoid Worker Timeout (SIGKILL)
-        thread = threading.Thread(
-            target=self._send_otp_email_async, 
-            args=(user.email, user.username, otp_code)
+        # Call the new service
+        send_transactional_email(
+            to_email=user.email,
+            subject="Your ShopEazy Security Code",
+            text_content=f"Hello {user.username}, your code is: {otp_code}. Expires in 5 minutes."
         )
-        thread.start()
-        
         return Response({"message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if request.user.id != instance.id:
+        
+        # 1. SECURITY CHECK: Ensure only the owner or an admin can access this endpoint
+        is_owner = request.user.id == instance.id
+        is_admin = getattr(request.user, 'role', None) == 'admin'
+        
+        if not is_owner and not is_admin:
             return Response({"error": "Unauthorized action."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 1. Extract OTP
-        submitted_otp = request.data.get('otp')
-        if not submitted_otp:
-            return Response({"error": "OTP verification code is required."}, status=status.HTTP_400_BAD_REQUEST)
+        # 2. PRIVILEGE ESCALATION PREVENTION: 
+        # If 'role' is in the request data, ONLY admins are allowed to pass.
+        if 'role' in request.data and not is_admin:
+            return Response({"error": "Only admins can modify user roles."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Validate OTP
-        cached_otp = cache.get(f"profile_otp_{request.user.id}")
-        
-        print(f"\n[SECURITY LOG] User: {request.user.username}")
-        print(f"[SECURITY LOG] Server Expected: {cached_otp}")
-        print(f"[SECURITY LOG] User Submitted: {submitted_otp}\n")
+        # 3. OTP VERIFICATION:
+        # We enforce OTP only if they are trying to change critical fields (like password or phone)
+        # Note: You could expand this list to include other sensitive fields
+        if 'password' in request.data or 'phone' in request.data:
+            submitted_otp = request.data.get('otp')
+            cached_otp = cache.get(f"profile_otp_{request.user.id}")
 
-        if not cached_otp or str(cached_otp).strip() != str(submitted_otp).strip():
-            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+            if not submitted_otp or not cached_otp or str(cached_otp).strip() != str(submitted_otp).strip():
+                return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # OTP verified, clear it
+            cache.delete(f"profile_otp_{request.user.id}")
 
-        # 3. Handle optional password update (Logic is safe here)
+        # 4. Handle Password Update
         password = request.data.get('password')
         if password:
             instance.set_password(password)
-            instance.save()
 
-        # 4. Perform Update
-        # Note: We must ensure the serializer has access to the data
+        # 5. Execute the Database Update
         try:
+            # This calls the serializer's update method
             response = super().update(request, *args, **kwargs)
+            return response
         except Exception as e:
-            print(f"[UPDATE ERROR] Serialization failed: {str(e)}")
             return Response({"error": "Profile update failed."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 5. Destroy OTP only on success
-        if response.status_code == 200:
-            cache.delete(f"profile_otp_{request.user.id}")
-            print(f"[SECURITY LOG] ✅ Profile updated. OTP securely destroyed.")
-
-        return response
 
 
 class AddressViewSet(viewsets.ModelViewSet):
@@ -266,131 +264,69 @@ class OrderViewSet(viewsets.ModelViewSet):
         return queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # 1. Save the new order to the database
         order = serializer.save(user=self.request.user)
-        
-        # 2. Send the instant Order Confirmation email to the customer
+        # Trigger email async
         self.send_order_status_email(order)
-        
-        # 3. (Optional but recommended) Log the new order for the Admin Activity Trail
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
-    # ==========================================
-    # PHASE 3 (Logs) & PHASE 4 (Emails) TRIGGER
-    # ==========================================
     def perform_update(self, serializer):
-        # 1. Capture the old state before saving
         instance = self.get_object()
         old_status = instance.status
-        
-        # 2. Save the new state
         new_instance = serializer.save()
         
-        # 3. Check if the status ACTUALLY changed
         if old_status != new_instance.status:
-            # Step A: Log it for the Admin
             log_admin_action(
                 self.request.user, 
                 f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'"
             )
-            
-            # Step B: Email the Customer
             self.send_order_status_email(new_instance)
 
-    # ==========================================
-    # EMAIL DISPATCHER WITH PAYMENT DETAILS
-    # ==========================================
+    # --- OPTIMIZED EMAIL DISPATCHER ---
     def send_order_status_email(self, order):
-        from .models import Payment # Imported here to avoid circular imports
-        
-        subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
-        
-        # Format the delivery details neatly
-        address_display = order.shipping_address if order.shipping_address else "Your Saved Address"
-        phone_display = order.contact_phone if order.contact_phone else "Your Saved Phone"
+        # Fire-and-forget: Pass the ID so the thread fetches fresh data
+        threading.Thread(target=self._send_email_async, args=(order.id,)).start()
 
-        # Fetch the payment associated with this order
-        payment = Payment.objects.filter(order=order).first()
-        
-        # Format payment details securely
-        if payment:
-            payment_method_display = payment.get_payment_method_display() 
-            transaction_id_display = payment.transaction_id
-        else:
-            payment_method_display = "Pending / N/A"
-            transaction_id_display = "Pending / N/A"
-
-        message = f"""Hello {order.user.username},
-
-Great news! There is an update regarding your recent ShopEazy order.
-
------------------------------------------
-ORDER SUMMARY
------------------------------------------
-Order ID: #{order.id}
-Current Status: {order.status.upper()}
-Order Total: ${order.total_price}
-
------------------------------------------
-PAYMENT DETAILS
------------------------------------------
-Method: {payment_method_display}
-Transaction ID: {transaction_id_display}
-
------------------------------------------
-DELIVERY DETAILS
------------------------------------------
-Location: {address_display}
-Contact: {phone_display}
-
-If you have any questions, simply reply to this email.
-
-Thank you for shopping with us!
-- The ShopEazy Team"""
-        
+    def _send_email_async(self, order_id):
         try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email="updates.eazyshop@gmail.com",
-                recipient_list=[order.user.email],
-                fail_silently=False, 
-            )
-            print(f"[EMAIL LOG] ✅ Status update sent to {order.user.email} for Order #{order.id}")
-        except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Failed to send email to {order.user.email}: {str(e)}")
+            order = Order.objects.get(id=order_id)
+            payment = Payment.objects.filter(order=order).first()
+            
+            # Simplified formatting
+            subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
+            body = f"""Hello {order.user.username},
 
-    # ==========================================
-    # SECURE ORDER CANCELLATION
-    # ==========================================
+There is an update on your ShopEazy order #{order.id}.
+Status: {order.status.upper()}
+Total: ${order.total_price}
+Payment: {payment.get_payment_method_display() if payment else 'Pending'}
+Transaction ID: {payment.transaction_id if payment else 'N/A'}
+Delivery to: {order.shipping_address or 'Saved Address'}
+
+Thank you!"""
+            
+            send_transactional_email(order.user.email, subject, body)
+            print(f"[EMAIL LOG] ✅ Background email sent for Order #{order_id}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         order = self.get_object()
-        
         if order.status != 'pending':
-            return Response(
-                {"error": f"Order cannot be cancelled because its current status is '{order.status}'."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Cannot cancel non-pending order."}, status=status.HTTP_400_BAD_REQUEST)
             
         with transaction.atomic():
             order.status = 'cancelled'
             order.save()
-            
-            # Restore stock safely
             for item in order.order_items.all():
                 product = Product.objects.select_for_update().get(id=item.product.id)
                 product.stock += item.quantity
                 product.save()
                 
-        # If an admin forced this cancellation, log it
         if getattr(request.user, 'role', '') == 'admin':
-            log_admin_action(request.user, f"Cancelled Order #{order.id} and restored inventory")
+            log_admin_action(request.user, f"Cancelled Order #{order.id}")
             
-        return Response(
-            {"message": "Order has been successfully cancelled and stock restored.", "status": "cancelled"},
-            status=status.HTTP_200_OK
-        )
+        return Response({"message": "Order cancelled."}, status=status.HTTP_200_OK)
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):

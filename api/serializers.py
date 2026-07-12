@@ -42,8 +42,22 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'phone', 'role']
-        read_only_fields = ['id', 'username', 'email'] 
+        fields = ['username', 'email', 'phone', 'role']
+        # 'role' is in the fields list, but we will block it in validation
+
+    def validate(self, data):
+        # 1. Check if 'role' is even present in the update request
+        if 'role' in data:
+            # 2. Check if the user making the request is an admin
+            request_user = self.context['request'].user
+            
+            if getattr(request_user, 'role', None) != 'admin':
+                # Security violation: Regular user trying to escalate privileges
+                raise serializers.ValidationError(
+                    {"role": "You do not have permission to modify user roles."}
+                )
+        
+        return data
 
 # --- NEW: Strictly for Password Changes ---
 class ChangePasswordSerializer(serializers.Serializer):
