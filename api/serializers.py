@@ -2,13 +2,19 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     User, Category, Product, Cart, CartItem, Order, 
-    OrderItem, Review, Wishlist, Coupon, Payment, AdminLog
+    OrderItem, Review, Wishlist, Coupon, Payment, AdminLog, Address
 )
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'address', 'phone']
+        fields = ['id', 'username', 'email', 'role', 'phone']
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = '__all__'
+        read_only_fields = ['user']
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -36,7 +42,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'address', 'phone', 'role']
+        fields = ['id', 'username', 'email', 'phone', 'role']
         read_only_fields = ['id', 'username', 'email'] 
 
 # --- NEW: Strictly for Password Changes ---
@@ -108,28 +114,29 @@ from django.db import transaction # Add this to your imports at the top
 
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True)
-    address = serializers.CharField(source='user.address', read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'status', 'created_at', 'order_items', 'total_price', 'address']
-        read_only_fields = ['id', 'user', 'created_at', 'total_price', 'address']
+        fields = [
+            'id', 'user', 'status', 'created_at', 'order_items', 
+            'total_price', 'shipping_address', 'contact_phone'
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'total_price']
 
     def validate(self, data):
         """
-        Validates that the user has a registered shipping address and phone number
-        prior to enabling order creation parameters.
+        Validates that the incoming request contains a valid shipping address 
+        and contact phone number for this specific order ONLY during creation.
         """
-        user = self.context['request'].user
-        
-        # Enforce profile data integrity rules
-        user_address = getattr(user, 'address', '')
-        user_phone = getattr(user, 'phone', '')
-        
-        if not user_address or not str(user_address).strip() or not user_phone or not str(user_phone).strip():
-            raise serializers.ValidationError(
-                "Order placement failed: A valid shipping address and phone number are compulsory."
-            )
+        if not self.instance:
+            shipping_address = data.get('shipping_address')
+            contact_phone = data.get('contact_phone')
+            
+            if not shipping_address or not str(shipping_address).strip() or not contact_phone or not str(contact_phone).strip():
+                raise serializers.ValidationError(
+                    "Order placement failed: A valid shipping address and contact phone number are compulsory."
+                )
+                
         return data
 
     def create(self, validated_data):
@@ -159,7 +166,7 @@ class OrderSerializer(serializers.ModelSerializer):
                 product.stock -= requested_qty
                 product.save()
 
-            # 2. Create the Order
+            # 2. Create the Order (This now safely saves shipping_address & contact_phone)
             order = Order.objects.create(
                 user=self.context['request'].user,
                 total_price=total_price,
