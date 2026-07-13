@@ -1,14 +1,20 @@
 import random
+import time
+import threading
 from django.db import transaction, IntegrityError
 from django.core.cache import cache
-from django.core.mail import send_mail
 from django.contrib.auth import authenticate
 
 from rest_framework import viewsets, generics, status, serializers
 from rest_framework.response import Response
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import ValidationError
+
+# 🚨 THE UPGRADE: Enterprise Filtering & Search
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -20,30 +26,28 @@ from .serializers import (
     UserSerializer, RegisterSerializer, UserProfileUpdateSerializer, ChangePasswordSerializer,
     CategorySerializer, ProductSerializer, OrderSerializer, OrderItemSerializer,
     ReviewSerializer, WishlistSerializer, CartSerializer, CartItemSerializer,
-    CouponSerializer, PaymentSerializer, AdminLogSerializer,AddressSerializer
+    CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
-from .utils import log_admin_action
-import threading
 from .email_service import send_transactional_email
-import time
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 12 
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 # ==========================================
 # SMART ADMIN LOGGER HELPER
 # ==========================================
 def log_admin_action(user, message):
-    """
-    Safely logs an action only if the user is an admin.
-    Truncates message to 255 chars to prevent database constraint errors.
-    """
     if user.is_authenticated and getattr(user, 'role', '') == 'admin':
         safe_message = message[:255]
         AdminLog.objects.create(admin=user, action=safe_message)
 
 
 # ==========================================
-# USERS & AUTHENTICATION
+# 1. USERS & AUTHENTICATION
 # ==========================================
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -63,7 +67,6 @@ class UserViewSet(viewsets.ModelViewSet):
         otp_code = str(random.randint(100000, 999999))
         cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
         
-        # Fires clean HTTP request to Brevo API
         send_transactional_email(
             to_email=user.email,
             subject="Your ShopEazy Security Code",
@@ -73,82 +76,60 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        
-        # 1. SECURITY CHECK: Ensure only the owner or an admin can access this endpoint
         is_owner = request.user.id == instance.id
         is_admin = getattr(request.user, 'role', None) == 'admin'
         
         if not is_owner and not is_admin:
             return Response({"error": "Unauthorized action."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. PRIVILEGE ESCALATION PREVENTION: 
         if 'role' in request.data and not is_admin:
             return Response({"error": "Only admins can modify user roles."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3. OTP VERIFICATION (Bypassed for Admins)
         if ('password' in request.data or 'phone' in request.data) and not is_admin:
             submitted_otp = request.data.get('otp')
             cached_otp = cache.get(f"profile_otp_{request.user.id}")
 
             if not submitted_otp or not cached_otp or str(cached_otp).strip() != str(submitted_otp).strip():
                 return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # OTP verified, clear it
             cache.delete(f"profile_otp_{request.user.id}")
 
-        # 4. Handle Password Update
         new_password = request.data.get('password')
         current_password = request.data.get('current_password')
 
         if new_password:
-            # Verify they know their current password before changing it
             if not current_password or not instance.check_password(current_password):
                 return Response({"error": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
             instance.set_password(new_password)
             instance.save()
 
-        # 5. Execute the Database Update
         try:
-            response = super().update(request, *args, **kwargs)
-            return response
-        except Exception as e:
+            return super().update(request, *args, **kwargs)
+        except Exception:
             return Response({"error": "Profile update failed."}, status=status.HTTP_400_BAD_REQUEST)
-
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated]
-
+    queryset = Address.objects.all()
     def get_queryset(self):
-        # Users can only see their own address book
-        return Address.objects.filter(user=self.request.user).order_by('-is_default', '-created_at')
+        return Address.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # 1. Check if this is their first address
         is_first = not Address.objects.filter(user=self.request.user).exists()
-        
-        # 2. If it's their first, force it to be default. Otherwise, take user's choice.
         is_default = True if is_first else serializer.validated_data.get('is_default', False)
-        
         instance = serializer.save(user=self.request.user, is_default=is_default)
-        
-        # 3. If this new one is default, remove default status from all others
         if instance.is_default and not is_first:
             Address.objects.filter(user=self.request.user).exclude(id=instance.id).update(is_default=False)
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        
-        # If updated to default, remove default status from all others
         if instance.is_default:
             Address.objects.filter(user=self.request.user).exclude(id=instance.id).update(is_default=False)
-
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = []
-
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = User.EMAIL_FIELD
@@ -163,10 +144,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'refresh': str(refresh),
             'access': str(refresh.access_token),
             'user': {
-                'id': user.id,
-                'email': user.email,
-                'username': user.username,
-                'role': user.role,
+                'id': user.id, 'email': user.email, 'username': user.username, 'role': user.role,
             },
         }
 
@@ -175,7 +153,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 # ==========================================
-# CORE E-COMMERCE (Products & Categories)
+# 2. CORE E-COMMERCE (Catalog)
 # ==========================================
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
@@ -190,7 +168,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_name = instance.name
         new_instance = serializer.save()
-        
         if old_name != new_instance.name:
             log_admin_action(self.request.user, f"Renamed Category: '{old_name}' -> '{new_instance.name}'")
 
@@ -199,39 +176,35 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance.delete()
         log_admin_action(self.request.user, f"Deleted category: '{name}'")
 
-
 class ProductViewSet(viewsets.ModelViewSet):
+    # 🚨 N+1 FIX: select_related fetches the category efficiently
     queryset = Product.objects.select_related('category').all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    pagination_class = StandardResultsSetPagination 
+    
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category'] # Allows: /api/products/?category=2
+    search_fields = ['name', 'description'] # Allows: /api/products/?search=laptop
+    ordering_fields = ['price', 'created_at'] # Allows: /api/products/?ordering=-price
 
     def perform_create(self, serializer):
         instance = serializer.save()
         log_admin_action(self.request.user, f"Created Product: '{instance.name}' at ${instance.price}")
 
     def perform_update(self, serializer):
-        # 1. Capture old state
         instance = self.get_object()
-        old_price = instance.price
-        old_stock = instance.stock
-        old_name = instance.name
-        
-        # 2. Save new state
+        old_price, old_stock, old_name = instance.price, instance.stock, instance.name
         new_instance = serializer.save()
         
-        # 3. Calculate smart diffs
         changes = []
-        if old_price != new_instance.price:
-            changes.append(f"Price: ${old_price} -> ${new_instance.price}")
-        if old_stock != new_instance.stock:
-            changes.append(f"Stock: {old_stock} -> {new_instance.stock}")
-        if old_name != new_instance.name:
-            changes.append(f"Name: {old_name} -> {new_instance.name}")
+        if old_price != new_instance.price: changes.append(f"Price: ${old_price} -> ${new_instance.price}")
+        if old_stock != new_instance.stock: changes.append(f"Stock: {old_stock} -> {new_instance.stock}")
+        if old_name != new_instance.name: changes.append(f"Name: {old_name} -> {new_instance.name}")
             
         if changes:
             log_admin_action(self.request.user, f"Updated '{new_instance.name}': {', '.join(changes)}")
-        else:
-            log_admin_action(self.request.user, f"Updated metadata/description for '{new_instance.name}'")
             
     def perform_destroy(self, instance):
         name = instance.name
@@ -240,13 +213,20 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 # ==========================================
-# CART & ORDERS
+# 3. CART & ORDERS
 # ==========================================
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
+    
+    pagination_class = StandardResultsSetPagination
+    
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['status']
+    ordering_fields = ['created_at', 'total_price']
 
     def get_queryset(self):
+        # 🚨 N+1 FIX: Efficiently grabs the Order, User, and the nested product details
         queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
         if getattr(self.request.user, 'role', None) == 'admin':
             return queryset.all()
@@ -261,33 +241,23 @@ class OrderViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_status = instance.status
         new_instance = serializer.save()
-        
         if old_status != new_instance.status:
-            log_admin_action(
-                self.request.user, 
-                f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'"
-            )
+            log_admin_action(self.request.user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
             self.send_order_status_email(new_instance)
 
     def send_order_status_email(self, order):
-        # Fire-and-forget background thread
         threading.Thread(target=self._send_email_async, args=(order.id,)).start()
 
     def _send_email_async(self, order_id):
-                
         try:
             order = Order.objects.get(id=order_id)
             payment = None
             
-            # 🚨 THE FIX: Smart Polling
-            # Wait for the frontend to submit the mock payment (checks once a second, up to 5 seconds)
             for _ in range(5):
                 payment = Payment.objects.filter(order=order).first()
-                if payment:
-                    break # Payment found! Break the loop and send the email.
+                if payment: break
                 time.sleep(1) 
             
-            # Format based on what we found
             if payment:
                 payment_method_display = payment.get_payment_method_display()
                 transaction_id_display = payment.transaction_id or "Mock-TXN-Pending"
@@ -296,27 +266,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                 transaction_id_display = "Awaiting System Confirmation"
             
             subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
-            body = f"""Hello {order.user.username},
-
-There is an update on your ShopEazy order #{order.id}.
-Status: {order.status.upper()}
-Total: ${order.total_price}
-
------------------------------------------
-PAYMENT DETAILS
------------------------------------------
-Payment: {payment_method_display}
-Transaction ID: {transaction_id_display}
-
------------------------------------------
-DELIVERY DETAILS
------------------------------------------
-Delivery to: {order.shipping_address or 'Saved Address'}
-
-Thank you!"""
+            body = f"Hello {order.user.username},\n\nThere is an update on your ShopEazy order #{order.id}.\nStatus: {order.status.upper()}\nTotal: ${order.total_price}\n\nPayment: {payment_method_display}\nTransaction ID: {transaction_id_display}\n\nDelivery to: {order.shipping_address or 'Saved Address'}\n\nThank you!"
             
             send_transactional_email(order.user.email, subject, body)
-            print(f"[EMAIL LOG] ✅ Background email sent for Order #{order_id}")
         except Exception as e:
             print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
 
@@ -355,17 +307,22 @@ class OrderItemViewSet(viewsets.ModelViewSet):
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Cart.objects.all()
     def get_queryset(self):
-        return Cart.objects.select_related('user').filter(user=self.request.user)
+        # 🚨 MASSIVE N+1 FIX: prefetch_related('items__product') stops the database from
+        # pinging the server for every single product inside the cart.
+        return Cart.objects.prefetch_related('items__product').filter(user=self.request.user)
+        
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
 
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
+    
     def get_queryset(self):
         return CartItem.objects.select_related('product', 'cart', 'cart__user').filter(cart__user=self.request.user)
+        
     def perform_create(self, serializer):
         cart, created = Cart.objects.get_or_create(user=self.request.user)
         try:
@@ -375,46 +332,49 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
 
 # ==========================================
-# REVIEWS & WISHLIST
+# 4. REVIEWS & WISHLIST
 # ==========================================
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.select_related('user', 'product').all()
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['product'] # Now React can fetch reviews for a specific product cleanly
 
     def get_permissions(self):
         if self.action in ['destroy']:
             return [IsAdminOrOwner()]
         return super().get_permissions()
 
-    def get_queryset(self):
-        product_id = self.request.query_params.get('product')
-        if product_id:
-            return Review.objects.select_related('user', 'product').filter(product_id=product_id).order_by('-created_at')
-        return super().get_queryset()
-
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+        except IntegrityError:
+            raise ValidationError({"detail": "You have already reviewed this product."})
 
     def perform_destroy(self, instance):
         review_info = f"Review by {instance.user.username} on '{instance.product.name}'"
         instance.delete()
-        # Only admins triggering this will actually write to the log (due to log_admin_action check)
         log_admin_action(self.request.user, f"Deleted {review_info}")
 
-
 class WishlistViewSet(viewsets.ModelViewSet):
-    queryset = Wishlist.objects.select_related('user', 'product').all()
     serializer_class = WishlistSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Wishlist.objects.all()
     def get_queryset(self):
-        return Wishlist.objects.select_related('user', 'product').filter(user=self.request.user)
+        # 🚨 N+1 FIX: Grabs the nested product details to prevent loops
+        return Wishlist.objects.select_related('product__category').filter(user=self.request.user)
+        
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+        except IntegrityError:
+            raise ValidationError({"detail": "This product is already in your wishlist."})
 
 
 # ==========================================
-# ADMIN SPECIFIC (Coupons, Payments, Logs)
+# 5. ADMIN SPECIFIC (Coupons, Payments, Logs)
 # ==========================================
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
@@ -429,7 +389,6 @@ class CouponViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_discount = instance.discount_percent
         new_instance = serializer.save()
-        
         if old_discount != new_instance.discount_percent:
             log_admin_action(self.request.user, f"Updated Coupon '{new_instance.code}': {old_discount}% -> {new_instance.discount_percent}%")
 
@@ -437,7 +396,6 @@ class CouponViewSet(viewsets.ModelViewSet):
         code = instance.code
         instance.delete()
         log_admin_action(self.request.user, f"Deleted Promo Code: '{code}'")
-
 
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('order').all()
@@ -450,7 +408,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
         new_instance = serializer.save()
         if old_status != new_instance.status:
             log_admin_action(self.request.user, f"Payment Tx #{new_instance.transaction_id} Status: '{old_status}' -> '{new_instance.status}'")
-
 
 class AdminLogViewSet(viewsets.ModelViewSet):
     queryset = AdminLog.objects.select_related('admin').all().order_by('-timestamp')
