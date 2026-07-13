@@ -231,7 +231,7 @@ const Dashboard = () => {
   const [loadingItems, setLoadingItems] = useState(false);
   
   // Profile & Address States
-  const [profileForm, setProfileForm] = useState({ phone: '', newPassword: '' });
+  const [profileForm, setProfileForm] = useState({ phone: '', currentPassword: '', newPassword: '', confirmPassword: '' });
   const [isRequestingOtp, setIsRequestingOtp] = useState(false);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
   
@@ -260,7 +260,7 @@ const Dashboard = () => {
         setOrders(ordersRes.data.filter(order => order.user === user.id));
         setUserReviews(reviewsRes.data.filter(r => r.username === user.username));
         setAddresses(addressRes.data);
-        setProfileForm({ phone: profileRes.data.phone || '', newPassword: '' });
+        setProfileForm({ phone: profileRes.data.phone || '', currentPassword: '', newPassword: '', confirmPassword: '' });
 
       } catch (error) { toast.error('❌ Failed to load dashboard data'); } 
       finally { setIsLoading(false); }
@@ -389,6 +389,14 @@ const Dashboard = () => {
 
   const handleProfileUpdateInitiate = async () => {
     if (!profileForm.phone.trim()) return toast.error('⚠️ Phone is required.');
+    
+    // 🚨 NEW: Strict Password Validation
+    if (profileForm.newPassword || profileForm.currentPassword || profileForm.confirmPassword) {
+      if (!profileForm.currentPassword) return toast.error('⚠️ Please enter your current password.');
+      if (profileForm.newPassword !== profileForm.confirmPassword) return toast.error('⚠️ New passwords do not match!');
+      if (profileForm.newPassword.length < 8) return toast.error('⚠️ New password must be at least 8 characters.');
+    }
+
     setIsRequestingOtp(true);
     try {
       await axiosInstance.post('/api/users/request-otp/');
@@ -401,13 +409,23 @@ const Dashboard = () => {
   const verifyAndSaveProfile = async (otpCode) => {
     try {
       const payload = { phone: profileForm.phone, otp: otpCode };
-      if (profileForm.newPassword) payload.password = profileForm.newPassword;
+      
+      // 🚨 NEW: Attach both passwords to the payload
+      if (profileForm.newPassword) {
+        payload.password = profileForm.newPassword;
+        payload.current_password = profileForm.currentPassword;
+      }
 
       await axiosInstance.patch(`/api/users/${user.id}/`, payload);
       toast.success('✅ Security Profile updated!');
       setIsOtpModalOpen(false);
-      setProfileForm(prev => ({ ...prev, newPassword: '' }));
-    } catch (err) { toast.error('❌ Invalid OTP or update failed.'); }
+      // Clear passwords on success
+      setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+    } catch (err) { 
+      // 🚨 NEW: Show specific backend errors (like "Current password incorrect")
+      const errorMsg = err.response?.data?.error || 'Invalid OTP or update failed.';
+      toast.error(`❌ ${errorMsg}`); 
+    }
   };
 
   const getStatusIcon = (status) => {
@@ -561,9 +579,21 @@ const Dashboard = () => {
                   <InputField type="tel" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: formatPhoneNumber(e.target.value)})} placeholder="(XXX) XXX-XXXX" maxLength="14" />
                 </FormGroup>
 
+                <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '0.5rem', marginBottom: '1rem', marginTop: '2rem' }}><FaLock /> Change Password</h3>
+                
                 <FormGroup>
-                  <label><FaLock /> Update Password</label>
-                  <InputField type="password" value={profileForm.newPassword} onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})} placeholder="Leave blank to keep current" />
+                  <label>Current Password</label>
+                  <InputField type="password" value={profileForm.currentPassword} onChange={e => setProfileForm({...profileForm, currentPassword: e.target.value})} placeholder="Required to change password" />
+                </FormGroup>
+
+                <FormGroup>
+                  <label>New Password</label>
+                  <InputField type="password" value={profileForm.newPassword} onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})} placeholder="At least 8 characters" />
+                </FormGroup>
+
+                <FormGroup>
+                  <label>Confirm New Password</label>
+                  <InputField type="password" value={profileForm.confirmPassword} onChange={e => setProfileForm({...profileForm, confirmPassword: e.target.value})} placeholder="Must match new password" />
                 </FormGroup>
 
                 <SaveProfileButton onClick={handleProfileUpdateInitiate} disabled={isRequestingOtp}>

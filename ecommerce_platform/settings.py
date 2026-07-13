@@ -180,13 +180,3 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# settings.py
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_USE_TLS = True
-EMAIL_PORT = 587
-EMAIL_HOST_USER = 'updates.eazyshop@gmail.com'
-EMAIL_HOST_PASSWORD = 'ndkd hwbf tmut vcko' # Paste the code from Step 1 here
-DEFAULT_FROM_EMAIL = 'ShopEazy Updates <updates.eazyshop@gmail.com>'

@@ -26,6 +26,7 @@ from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
 from .utils import log_admin_action
 import threading
 from .email_service import send_transactional_email
+import time
 
 
 # ==========================================
@@ -56,27 +57,13 @@ class UserViewSet(viewsets.ModelViewSet):
             return ChangePasswordSerializer
         return UserSerializer
 
-    # --- THREADED EMAIL HELPER ---
-    def _send_otp_email_async(self, email, username, otp_code):
-        try:
-            send_mail(
-                subject="Your ShopEazy Security Code",
-                message=f"Hello {username},\n\nYou requested to update your profile. Your verification code is: {otp_code}\n\nThis code expires in 5 minutes.",
-                from_email="updates.eazyshop@gmail.com",
-                recipient_list=[email],
-                fail_silently=True, # Critical: Prevents crashing the worker if SMTP fails
-            )
-            print(f"[EMAIL LOG] ✅ OTP sent to {email}")
-        except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Failed to send OTP email: {str(e)}")
-
     @action(detail=False, methods=['post'], url_path='request-otp', permission_classes=[IsAuthenticated])
     def request_otp(self, request):
         user = request.user
         otp_code = str(random.randint(100000, 999999))
         cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
         
-        # Call the new service
+        # Fires clean HTTP request to Brevo API
         send_transactional_email(
             to_email=user.email,
             subject="Your ShopEazy Security Code",
@@ -95,14 +82,11 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"error": "Unauthorized action."}, status=status.HTTP_403_FORBIDDEN)
 
         # 2. PRIVILEGE ESCALATION PREVENTION: 
-        # If 'role' is in the request data, ONLY admins are allowed to pass.
         if 'role' in request.data and not is_admin:
             return Response({"error": "Only admins can modify user roles."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3. OTP VERIFICATION:
-        # We enforce OTP only if they are trying to change critical fields (like password or phone)
-        # Note: You could expand this list to include other sensitive fields
-        if 'password' in request.data or 'phone' in request.data:
+        # 3. OTP VERIFICATION (Bypassed for Admins)
+        if ('password' in request.data or 'phone' in request.data) and not is_admin:
             submitted_otp = request.data.get('otp')
             cached_otp = cache.get(f"profile_otp_{request.user.id}")
 
@@ -113,13 +97,18 @@ class UserViewSet(viewsets.ModelViewSet):
             cache.delete(f"profile_otp_{request.user.id}")
 
         # 4. Handle Password Update
-        password = request.data.get('password')
-        if password:
-            instance.set_password(password)
+        new_password = request.data.get('password')
+        current_password = request.data.get('current_password')
+
+        if new_password:
+            # Verify they know their current password before changing it
+            if not current_password or not instance.check_password(current_password):
+                return Response({"error": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+            instance.set_password(new_password)
+            instance.save()
 
         # 5. Execute the Database Update
         try:
-            # This calls the serializer's update method
             response = super().update(request, *args, **kwargs)
             return response
         except Exception as e:
@@ -265,7 +254,6 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         order = serializer.save(user=self.request.user)
-        # Trigger email async
         self.send_order_status_email(order)
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
@@ -281,25 +269,48 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
             self.send_order_status_email(new_instance)
 
-    # --- OPTIMIZED EMAIL DISPATCHER ---
     def send_order_status_email(self, order):
-        # Fire-and-forget: Pass the ID so the thread fetches fresh data
+        # Fire-and-forget background thread
         threading.Thread(target=self._send_email_async, args=(order.id,)).start()
 
     def _send_email_async(self, order_id):
+                
         try:
             order = Order.objects.get(id=order_id)
-            payment = Payment.objects.filter(order=order).first()
+            payment = None
             
-            # Simplified formatting
+            # 🚨 THE FIX: Smart Polling
+            # Wait for the frontend to submit the mock payment (checks once a second, up to 5 seconds)
+            for _ in range(5):
+                payment = Payment.objects.filter(order=order).first()
+                if payment:
+                    break # Payment found! Break the loop and send the email.
+                time.sleep(1) 
+            
+            # Format based on what we found
+            if payment:
+                payment_method_display = payment.get_payment_method_display()
+                transaction_id_display = payment.transaction_id or "Mock-TXN-Pending"
+            else:
+                payment_method_display = "Pending Payment"
+                transaction_id_display = "Awaiting System Confirmation"
+            
             subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
             body = f"""Hello {order.user.username},
 
 There is an update on your ShopEazy order #{order.id}.
 Status: {order.status.upper()}
 Total: ${order.total_price}
-Payment: {payment.get_payment_method_display() if payment else 'Pending'}
-Transaction ID: {payment.transaction_id if payment else 'N/A'}
+
+-----------------------------------------
+PAYMENT DETAILS
+-----------------------------------------
+Payment: {payment_method_display}
+Transaction ID: {transaction_id_display}
+
+-----------------------------------------
+DELIVERY DETAILS
+-----------------------------------------
 Delivery to: {order.shipping_address or 'Saved Address'}
 
 Thank you!"""
