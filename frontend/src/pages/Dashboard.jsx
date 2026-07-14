@@ -2,12 +2,11 @@ import { useEffect, useState, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { 
-  FaBoxOpen, FaBox, FaTruck, FaCheckCircle, FaTimesCircle, FaBan, FaStar, 
-  FaEdit, FaTrash, FaUserShield, FaLock, FaMapMarkerAlt, FaPhoneAlt, FaPlus 
-} from 'react-icons/fa';
+import { FaBoxOpen, FaBox, FaTruck, FaCheckCircle, FaTimesCircle, FaBan, FaStar, FaEdit, FaTrash, FaUserShield, FaLock, FaMapMarkerAlt, FaPhoneAlt, FaPlus } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 
+// === Modals (Unchanged for brevity, paste your existing ones here) ===
+// (SecureProcessingOverlay, ConfirmationModal, ReviewModal, OtpModal, AddressModal)
 // ==========================================
 // SECURE PROCESSING OVERLAY
 // ==========================================
@@ -47,9 +46,6 @@ const SecureProcessingOverlay = ({ isVisible }) => {
   );
 };
 
-// ==========================================
-// CANCEL ORDER MODAL 
-// ==========================================
 const ConfirmationModal = ({ isOpen, onClose, onConfirm }) => (
   <AnimatePresence>
     {isOpen && (
@@ -67,9 +63,6 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm }) => (
   </AnimatePresence>
 );
 
-// ==========================================
-// REVIEW MODAL 
-// ==========================================
 const ReviewModal = ({ isOpen, onClose, reviewData, onSubmit, isSubmitting }) => {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(null);
@@ -120,9 +113,6 @@ const ReviewModal = ({ isOpen, onClose, reviewData, onSubmit, isSubmitting }) =>
   );
 };
 
-// ==========================================
-// OTP VERIFICATION MODAL
-// ==========================================
 const OtpModal = ({ isOpen, onClose, onVerify, isVerifying, userEmail }) => {
   const [otp, setOtp] = useState('');
   if (!isOpen) return null;
@@ -134,13 +124,7 @@ const OtpModal = ({ isOpen, onClose, onVerify, isVerifying, userEmail }) => {
         <h3>Security Verification</h3>
         <p>To protect your account, we just sent a 6-digit code to <strong>{userEmail}</strong>.</p>
         
-        <OtpInput 
-          type="text" 
-          maxLength="6" 
-          placeholder="000000" 
-          value={otp} 
-          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
-        />
+        <OtpInput type="text" maxLength="6" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} />
 
         <ButtonGroup style={{ marginTop: '1.5rem' }}>
           <ModalSecondaryButton onClick={onClose} disabled={isVerifying}>Cancel</ModalSecondaryButton>
@@ -153,9 +137,6 @@ const OtpModal = ({ isOpen, onClose, onVerify, isVerifying, userEmail }) => {
   );
 };
 
-// ==========================================
-// NEW: ADDRESS BOOK MODAL
-// ==========================================
 const AddressModal = ({ isOpen, onClose, onSubmit, initialData, isSubmitting }) => {
   const [label, setLabel] = useState('Home');
   const [fullAddress, setFullAddress] = useState('');
@@ -177,11 +158,7 @@ const AddressModal = ({ isOpen, onClose, onSubmit, initialData, isSubmitting }) 
         <div style={{ textAlign: 'left', marginTop: '1.5rem' }}>
           <FormGroup>
             <label>Address Label</label>
-            <select 
-              value={label} 
-              onChange={e => setLabel(e.target.value)} 
-              style={{ padding: '0.8rem', borderRadius: '8px', border: '1px solid #ccc', fontSize: '1rem', outline: 'none' }}
-            >
+            <select value={label} onChange={e => setLabel(e.target.value)} style={{ padding: '0.8rem', borderRadius: '8px', border: '1px solid #ccc', fontSize: '1rem', outline: 'none' }}>
               <option value="Home">Home</option>
               <option value="Work">Work</option>
               <option value="Other">Other</option>
@@ -190,13 +167,7 @@ const AddressModal = ({ isOpen, onClose, onSubmit, initialData, isSubmitting }) 
 
           <FormGroup>
             <label>Full Delivery Address</label>
-            <textarea 
-              rows="4" 
-              placeholder="House/Apt Number, Street, City, ZIP Code..." 
-              value={fullAddress} 
-              onChange={e => setFullAddress(e.target.value)} 
-              style={{ padding: '0.8rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} 
-            />
+            <textarea rows="4" placeholder="House/Apt Number, Street, City, ZIP Code..." value={fullAddress} onChange={e => setFullAddress(e.target.value)} style={{ padding: '0.8rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
           </FormGroup>
         </div>
 
@@ -211,92 +182,104 @@ const AddressModal = ({ isOpen, onClose, onSubmit, initialData, isSubmitting }) 
   );
 };
 
-
 // ==========================================
 // MAIN DASHBOARD COMPONENT
 // ==========================================
 const Dashboard = () => {
   const { axiosInstance, user } = useContext(AuthContext);
-  
-  // Navigation State
   const [activeTab, setActiveTab] = useState('orders'); 
 
-  // Data States
+  // Segregated States
   const [orders, setOrders] = useState([]);
+  const [orderPage, setOrderPage] = useState(1);
+  const [totalOrderPages, setTotalOrderPages] = useState(1);
+
   const [userReviews, setUserReviews] = useState([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [totalReviewPages, setTotalReviewPages] = useState(1);
+
   const [addresses, setAddresses] = useState([]); 
-  const [isLoading, setIsLoading] = useState(true);
+  const [profileForm, setProfileForm] = useState({ phone: '', currentPassword: '', newPassword: '', confirmPassword: '' });
+  
+  // UI & Modals State
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderItems, setOrderItems] = useState({});
   const [loadingItems, setLoadingItems] = useState(false);
   
-  // Profile & Address States
-  const [profileForm, setProfileForm] = useState({ phone: '', currentPassword: '', newPassword: '', confirmPassword: '' });
   const [isRequestingOtp, setIsRequestingOtp] = useState(false);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
-  
-  // Address Modal State
   const [addressModalData, setAddressModalData] = useState({ isOpen: false, initialData: null });
   const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
-
-  // General Modal States
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
   const [reviewModalData, setReviewModalData] = useState({ isOpen: false });
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  // 1. Fetch Profile & Addresses (Runs Once)
   useEffect(() => {
-    setIsLoading(true);
-    const fetchData = async () => {
+    const fetchProfileAndAddresses = async () => {
       try {
-        const [ordersRes, reviewsRes, profileRes, addressRes] = await Promise.all([
-          axiosInstance.get('/api/orders/'),
-          axiosInstance.get('/api/reviews/'),
+        const [profileRes, addressRes] = await Promise.all([
           axiosInstance.get(`/api/users/${user.id}/`),
-          axiosInstance.get('/api/addresses/') 
+          axiosInstance.get('/api/addresses/')
         ]);
-
-        setOrders(ordersRes.data.filter(order => order.user === user.id));
-        setUserReviews(reviewsRes.data.filter(r => r.username === user.username));
-        setAddresses(addressRes.data);
-        setProfileForm({ phone: profileRes.data.phone || '', currentPassword: '', newPassword: '', confirmPassword: '' });
-
-      } catch (error) { toast.error('❌ Failed to load dashboard data'); } 
-      finally { setIsLoading(false); }
+        setAddresses(addressRes.data.results || addressRes.data);
+        setProfileForm(prev => ({ ...prev, phone: profileRes.data.phone || '' }));
+      } catch (error) { toast.error('Failed to load profile data'); } 
+      finally { setIsLoadingProfile(false); }
     };
-    fetchData();
-  }, [axiosInstance, user]);
+    fetchProfileAndAddresses();
+  }, [axiosInstance, user.id]);
+
+  // 2. Fetch Paginated Orders (Runs when orderPage changes)
+  const fetchOrders = async () => {
+    setIsLoadingOrders(true);
+    try {
+      const res = await axiosInstance.get(`/api/orders/?page=${orderPage}`);
+      setOrders(res.data.results || res.data);
+      if (res.data.count) setTotalOrderPages(Math.ceil(res.data.count / 12));
+    } catch (error) { toast.error('Failed to load orders'); } 
+    finally { setIsLoadingOrders(false); }
+  };// eslint-disable-next-line
+  useEffect(() => { fetchOrders(); }, [orderPage, axiosInstance]);
+
+  // 3. Fetch Paginated Reviews (Runs when reviewPage changes)
+  const fetchReviews = async () => {
+    setIsLoadingReviews(true);
+    try {
+      // 🚨 REQUIRES BACKEND FIX: Added 'user' to filterset_fields in views.py!
+      const res = await axiosInstance.get(`/api/reviews/?user=${user.id}&page=${reviewPage}`);
+      setUserReviews(res.data.results || res.data);
+      if (res.data.count) setTotalReviewPages(Math.ceil(res.data.count / 12));
+    } catch (error) { toast.error('Failed to load reviews'); } 
+    finally { setIsLoadingReviews(false); }
+  };// eslint-disable-next-line
+  useEffect(() => { fetchReviews(); }, [reviewPage, axiosInstance, user.id]);
 
   // --- Address Book Logic ---
-  const openAddressModal = (address = null) => {
-    setAddressModalData({ isOpen: true, initialData: address });
-  };
-
-  const closeAddressModal = () => {
-    setAddressModalData({ isOpen: false, initialData: null });
-  };
+  const openAddressModal = (address = null) => setAddressModalData({ isOpen: true, initialData: address });
+  const closeAddressModal = () => setAddressModalData({ isOpen: false, initialData: null });
 
   const handleSaveAddress = async (data) => {
     setIsSubmittingAddress(true);
     try {
       if (addressModalData.initialData) {
-        // Edit existing address
         await axiosInstance.patch(`/api/addresses/${addressModalData.initialData.id}/`, data);
         toast.success('📍 Address updated successfully!');
       } else {
-        // Add new address
         await axiosInstance.post('/api/addresses/', data);
         toast.success('📍 Address added successfully!');
       }
       const res = await axiosInstance.get('/api/addresses/');
-      setAddresses(res.data);
+      setAddresses(res.data.results || res.data);
       closeAddressModal();
-    } catch (err) { 
-      toast.error('❌ Failed to save address'); 
-    } finally {
-      setIsSubmittingAddress(false);
-    }
+    } catch (err) { toast.error('❌ Failed to save address'); } 
+    finally { setIsSubmittingAddress(false); }
   };
 
   const handleSetDefaultAddress = async (id) => {
@@ -304,7 +287,7 @@ const Dashboard = () => {
       await axiosInstance.patch(`/api/addresses/${id}/`, { is_default: true });
       toast.success('⭐ Default address updated!');
       const res = await axiosInstance.get('/api/addresses/');
-      setAddresses(res.data);
+      setAddresses(res.data.results || res.data);
     } catch (err) { toast.error('❌ Failed to update address'); }
   };
 
@@ -363,8 +346,7 @@ const Dashboard = () => {
         await axiosInstance.post('/api/reviews/', { product: data.productId, rating: data.rating, comment: data.comment });
         toast.success('⭐ Review submitted successfully!');
       }
-      const reviewsRes = await axiosInstance.get('/api/reviews/');
-      setUserReviews(reviewsRes.data.filter(r => r.username === user.username));
+      fetchReviews(); // Re-fetch paginated reviews
       setReviewModalData({ isOpen: false });
     } catch (err) { toast.error('❌ Failed to save review.'); } 
     finally { setIsSubmittingReview(false); }
@@ -375,7 +357,7 @@ const Dashboard = () => {
     try {
       await axiosInstance.delete(`/api/reviews/${reviewId}/`);
       toast.success('🗑️ Review deleted');
-      setUserReviews(prev => prev.filter(r => r.id !== reviewId));
+      fetchReviews();
     } catch { toast.error('❌ Failed to delete review'); }
   };
 
@@ -389,8 +371,6 @@ const Dashboard = () => {
 
   const handleProfileUpdateInitiate = async () => {
     if (!profileForm.phone.trim()) return toast.error('⚠️ Phone is required.');
-    
-    // 🚨 NEW: Strict Password Validation
     if (profileForm.newPassword || profileForm.currentPassword || profileForm.confirmPassword) {
       if (!profileForm.currentPassword) return toast.error('⚠️ Please enter your current password.');
       if (profileForm.newPassword !== profileForm.confirmPassword) return toast.error('⚠️ New passwords do not match!');
@@ -409,20 +389,15 @@ const Dashboard = () => {
   const verifyAndSaveProfile = async (otpCode) => {
     try {
       const payload = { phone: profileForm.phone, otp: otpCode };
-      
-      // 🚨 NEW: Attach both passwords to the payload
       if (profileForm.newPassword) {
         payload.password = profileForm.newPassword;
         payload.current_password = profileForm.currentPassword;
       }
-
       await axiosInstance.patch(`/api/users/${user.id}/`, payload);
       toast.success('✅ Security Profile updated!');
       setIsOtpModalOpen(false);
-      // Clear passwords on success
       setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
     } catch (err) { 
-      // 🚨 NEW: Show specific backend errors (like "Current password incorrect")
       const errorMsg = err.response?.data?.error || 'Invalid OTP or update failed.';
       toast.error(`❌ ${errorMsg}`); 
     }
@@ -440,33 +415,18 @@ const Dashboard = () => {
 
   return (
     <DashboardContainer>
-      
-      {/* Modals */}
       <ConfirmationModal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} onConfirm={executeCancelOrder} />
       <OtpModal isOpen={isOtpModalOpen} onClose={() => setIsOtpModalOpen(false)} onVerify={verifyAndSaveProfile} userEmail={user.email || "your registered email"} />
       <SecureProcessingOverlay isVisible={isRequestingOtp} />
       
       <AnimatePresence>
-        {reviewModalData.isOpen && (
-          <ReviewModal isOpen={reviewModalData.isOpen} onClose={() => setReviewModalData({ isOpen: false })} reviewData={reviewModalData} onSubmit={handleReviewSubmit} isSubmitting={isSubmittingReview} />
-        )}
+        {reviewModalData.isOpen && <ReviewModal isOpen={reviewModalData.isOpen} onClose={() => setReviewModalData({ isOpen: false })} reviewData={reviewModalData} onSubmit={handleReviewSubmit} isSubmitting={isSubmittingReview} />}
       </AnimatePresence>
-
       <AnimatePresence>
-        {addressModalData.isOpen && (
-          <AddressModal 
-            isOpen={addressModalData.isOpen} 
-            onClose={closeAddressModal} 
-            onSubmit={handleSaveAddress} 
-            initialData={addressModalData.initialData} 
-            isSubmitting={isSubmittingAddress} 
-          />
-        )}
+        {addressModalData.isOpen && <AddressModal isOpen={addressModalData.isOpen} onClose={closeAddressModal} onSubmit={handleSaveAddress} initialData={addressModalData.initialData} isSubmitting={isSubmittingAddress} />}
       </AnimatePresence>
       
-      <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        My Dashboard
-      </motion.h1>
+      <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>My Dashboard</motion.h1>
 
       <TabBar>
         <Tab $active={activeTab === 'orders'} onClick={() => setActiveTab('orders')}><FaBoxOpen /> Orders</Tab>
@@ -474,16 +434,13 @@ const Dashboard = () => {
         <Tab $active={activeTab === 'profile'} onClick={() => setActiveTab('profile')}><FaUserShield /> Profile Settings</Tab>
       </TabBar>
 
-      {isLoading ? (
-        <LoadingWrapper><Spinner /><LoadingText>Loading...</LoadingText></LoadingWrapper>
-      ) : (
-        <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          
-          {/* TAB 1: ORDERS */}
-          {activeTab === 'orders' && (
-            orders.length === 0 ? (
-              <EmptyState><FaBoxOpen size={48} color="#9E9E9E" /><p>No orders yet</p></EmptyState>
-            ) : (
+      {/* TAB 1: ORDERS */}
+      {activeTab === 'orders' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          {isLoadingOrders ? <LoadingWrapper><Spinner /><LoadingText>Loading...</LoadingText></LoadingWrapper> 
+          : orders.length === 0 ? <EmptyState><FaBoxOpen size={48} color="#9E9E9E" /><p>No orders yet</p></EmptyState> 
+          : (
+            <>
               <OrdersList>
                 {orders.map((order) => (
                   <OrderCard key={order.id}>
@@ -491,15 +448,8 @@ const Dashboard = () => {
                       <div><h3>Order #{order.id}</h3><OrderDate>{new Date(order.created_at).toLocaleDateString()}</OrderDate></div>
                       <StatusBadge status={order.status}>{getStatusIcon(order.status)} <span>{order.status}</span></StatusBadge>
                     </OrderHeader>
-                    
-                    {order.shipping_address && (
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#555' }}>
-                        <strong><FaMapMarkerAlt /> Shipped To: </strong> {order.shipping_address}
-                      </div>
-                    )}
-                    
+                    {order.shipping_address && <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#555' }}><strong><FaMapMarkerAlt /> Shipped To: </strong> {order.shipping_address}</div>}
                     <OrderTotal>Total: ${Number(order.total_price)?.toFixed(2)}</OrderTotal>
-                    
                     <ActionGroup>
                       <button onClick={() => { if(expandedOrderId === order.id) setExpandedOrderId(null); else { setExpandedOrderId(order.id); fetchOrderItems(order.id); } }} style={viewItemsButtonStyle}>
                         {expandedOrderId === order.id ? 'Hide Items' : 'View Order Items'}
@@ -510,7 +460,6 @@ const Dashboard = () => {
                         </DashboardCancelButton>
                       )}
                     </ActionGroup>
-
                     {expandedOrderId === order.id && (
                       <ItemsList>
                         {loadingItems ? <LoadingWrapper><Spinner size="small" /></LoadingWrapper> : orderItems[order.id]?.map(item => {
@@ -532,14 +481,25 @@ const Dashboard = () => {
                   </OrderCard>
                 ))}
               </OrdersList>
-            )
+              {totalOrderPages > 1 && (
+                <PaginationWrapper>
+                  <PageButton onClick={() => setOrderPage(p => Math.max(p - 1, 1))} disabled={orderPage === 1}>&larr; Previous</PageButton>
+                  <PageInfo>Page {orderPage} of {totalOrderPages}</PageInfo>
+                  <PageButton onClick={() => setOrderPage(p => Math.min(p + 1, totalOrderPages))} disabled={orderPage === totalOrderPages}>Next &rarr;</PageButton>
+                </PaginationWrapper>
+              )}
+            </>
           )}
+        </motion.div>
+      )}
 
-          {/* TAB 2: REVIEWS */}
-          {activeTab === 'reviews' && (
-            userReviews.length === 0 ? (
-              <EmptyState><FaStar size={48} color="#9E9E9E" /><p>You haven't reviewed any products yet.</p></EmptyState>
-            ) : (
+      {/* TAB 2: REVIEWS */}
+      {activeTab === 'reviews' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          {isLoadingReviews ? <LoadingWrapper><Spinner /><LoadingText>Loading...</LoadingText></LoadingWrapper> 
+          : userReviews.length === 0 ? <EmptyState><FaStar size={48} color="#9E9E9E" /><p>You haven't reviewed any products yet.</p></EmptyState> 
+          : (
+            <>
               <OrdersList>
                 {userReviews.map(review => (
                   <ReviewItemCard key={review.id}>
@@ -557,64 +517,46 @@ const Dashboard = () => {
                   </ReviewItemCard>
                 ))}
               </OrdersList>
-            )
+              {totalReviewPages > 1 && (
+                <PaginationWrapper>
+                  <PageButton onClick={() => setReviewPage(p => Math.max(p - 1, 1))} disabled={reviewPage === 1}>&larr; Previous</PageButton>
+                  <PageInfo>Page {reviewPage} of {totalReviewPages}</PageInfo>
+                  <PageButton onClick={() => setReviewPage(p => Math.min(p + 1, totalReviewPages))} disabled={reviewPage === totalReviewPages}>Next &rarr;</PageButton>
+                </PaginationWrapper>
+              )}
+            </>
           )}
+        </motion.div>
+      )}
 
-          {/* TAB 3: PROFILE SETTINGS */}
-          {activeTab === 'profile' && (
+      {/* TAB 3: PROFILE SETTINGS */}
+      {activeTab === 'profile' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          {isLoadingProfile ? <LoadingWrapper><Spinner /><LoadingText>Loading...</LoadingText></LoadingWrapper> : (
             <ProfileGrid>
-              
-              {/* Left Column: Secure Info */}
               <ProfileCard>
                 <ProfileHeader>
                   <Avatar>{user.username?.charAt(0).toUpperCase()}</Avatar>
                   <div><h2>{user.username}</h2><p>{user.email}</p></div>
                 </ProfileHeader>
-
                 <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '0.5rem', marginBottom: '1rem' }}><FaUserShield /> Security & Contact</h3>
                 <p style={{ color: '#757575', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Changes here require email OTP verification.</p>
-                
-                <FormGroup>
-                  <label><FaPhoneAlt /> Phone Number</label>
-                  <InputField type="tel" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: formatPhoneNumber(e.target.value)})} placeholder="(XXX) XXX-XXXX" maxLength="14" />
-                </FormGroup>
-
+                <FormGroup><label><FaPhoneAlt /> Phone Number</label><InputField type="tel" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: formatPhoneNumber(e.target.value)})} placeholder="(XXX) XXX-XXXX" maxLength="14" /></FormGroup>
                 <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '0.5rem', marginBottom: '1rem', marginTop: '2rem' }}><FaLock /> Change Password</h3>
-                
-                <FormGroup>
-                  <label>Current Password</label>
-                  <InputField type="password" value={profileForm.currentPassword} onChange={e => setProfileForm({...profileForm, currentPassword: e.target.value})} placeholder="Required to change password" />
-                </FormGroup>
-
-                <FormGroup>
-                  <label>New Password</label>
-                  <InputField type="password" value={profileForm.newPassword} onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})} placeholder="At least 8 characters" />
-                </FormGroup>
-
-                <FormGroup>
-                  <label>Confirm New Password</label>
-                  <InputField type="password" value={profileForm.confirmPassword} onChange={e => setProfileForm({...profileForm, confirmPassword: e.target.value})} placeholder="Must match new password" />
-                </FormGroup>
-
-                <SaveProfileButton onClick={handleProfileUpdateInitiate} disabled={isRequestingOtp}>
-                  {isRequestingOtp ? 'Requesting Code...' : 'Save Security Changes'}
-                </SaveProfileButton>
+                <FormGroup><label>Current Password</label><InputField type="password" value={profileForm.currentPassword} onChange={e => setProfileForm({...profileForm, currentPassword: e.target.value})} placeholder="Required to change password" /></FormGroup>
+                <FormGroup><label>New Password</label><InputField type="password" value={profileForm.newPassword} onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})} placeholder="At least 8 characters" /></FormGroup>
+                <FormGroup><label>Confirm New Password</label><InputField type="password" value={profileForm.confirmPassword} onChange={e => setProfileForm({...profileForm, confirmPassword: e.target.value})} placeholder="Must match new password" /></FormGroup>
+                <SaveProfileButton onClick={handleProfileUpdateInitiate} disabled={isRequestingOtp}>{isRequestingOtp ? 'Requesting Code...' : 'Save Security Changes'}</SaveProfileButton>
               </ProfileCard>
-
-              {/* Right Column: Address Book */}
               <ProfileCard>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>
                   <h3 style={{ margin: 0 }}><FaMapMarkerAlt /> Address Book</h3>
                   <AddButton onClick={() => openAddressModal()}><FaPlus /> Add New</AddButton>
                 </div>
-
                 <AddressList>
                   {addresses.map(addr => (
                     <AddressCard key={addr.id} $isDefault={addr.is_default}>
-                      <div className="info">
-                        <strong>{addr.label} {addr.is_default && <span className="badge">Default</span>}</strong>
-                        <p>{addr.full_address}</p>
-                      </div>
+                      <div className="info"><strong>{addr.label} {addr.is_default && <span className="badge">Default</span>}</strong><p>{addr.full_address}</p></div>
                       <div className="actions">
                         {!addr.is_default && <button className="star" onClick={() => handleSetDefaultAddress(addr.id)} title="Set as Default"><FaStar /></button>}
                         <button className="edit" onClick={() => openAddressModal(addr)} title="Edit Address"><FaEdit /></button>
@@ -625,10 +567,8 @@ const Dashboard = () => {
                   {addresses.length === 0 && <p style={{ color: '#9e9e9e', fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>No addresses saved yet.</p>}
                 </AddressList>
               </ProfileCard>
-
             </ProfileGrid>
           )}
-
         </motion.div>
       )}
     </DashboardContainer>
@@ -636,13 +576,11 @@ const Dashboard = () => {
 };
 
 // ==========================================
-// STYLED COMPONENTS
+// STYLED COMPONENTS (Append these if they are missing, though you likely have most of them)
 // ==========================================
 const DashboardContainer = styled.div` padding: 7rem 2rem 2rem 2rem; max-width: 1000px; margin: 0 auto; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%); @media (max-width: 768px) { padding: 6rem 1rem 1rem 1rem; }`;
 const TabBar = styled.div` display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 1rem; overflow-x: auto; scrollbar-width: none; `;
 const Tab = styled.button` display: flex; align-items: center; gap: 0.5rem; background: ${props => props.$active ? '#2e7d32' : 'transparent'}; color: ${props => props.$active ? 'white' : '#616161'}; border: none; padding: 0.8rem 1.5rem; border-radius: 30px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.3s; white-space: nowrap; &:hover { background: ${props => props.$active ? '#1b5e20' : '#e0e0e0'}; }`;
-
-// Profile Specific (Split Layout)
 const ProfileGrid = styled.div` display: grid; grid-template-columns: 1fr; gap: 2rem; @media (min-width: 800px) { grid-template-columns: 1fr 1.2fr; } `;
 const ProfileCard = styled.div` background: white; border-radius: 16px; padding: 2rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.1); `;
 const ProfileHeader = styled.div` display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid #eee; h2 { margin: 0; color: #111; } p { margin: 0; color: #757575; } `;
@@ -650,34 +588,17 @@ const Avatar = styled.div` width: 70px; height: 70px; border-radius: 50%; backgr
 const FormGroup = styled.div` display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; label { font-weight: 600; color: #2e7d32; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; } `;
 const InputField = styled.input` padding: 0.8rem 1rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; outline: none; transition: border-color 0.2s; &:focus { border-color: #4CAF50; } `;
 const SaveProfileButton = styled(motion.button)` width: 100%; padding: 1rem; background: #4CAF50; color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; margin-top: 1rem; &:disabled { background: #a5d6a7; cursor: not-allowed; } `;
-
-// Address Book Specific
 const AddButton = styled.button` display: flex; align-items: center; gap: 0.5rem; background: #e8f5e9; color: #2e7d32; border: 1px solid #81c784; padding: 0.4rem 0.8rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s; &:hover { background: #c8e6c9; } `;
 const AddressList = styled.div` display: flex; flex-direction: column; gap: 1rem; `;
-const AddressCard = styled.div` display: flex; justify-content: space-between; align-items: flex-start; padding: 1rem; border: 2px solid ${props => props.$isDefault ? '#4caf50' : '#eee'}; border-radius: 12px; background: ${props => props.$isDefault ? '#f1f8e9' : 'white'}; 
-  .info strong { display: flex; align-items: center; gap: 0.5rem; color: #333; } 
-  .info p { margin: 0.5rem 0 0 0; color: #666; font-size: 0.95rem; line-height: 1.4; white-space: pre-wrap; } 
-  .badge { background: #4caf50; color: white; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 12px; text-transform: uppercase; } 
-  .actions { display: flex; gap: 0.2rem; } 
-  .actions button { background: none; border: none; cursor: pointer; padding: 0.5rem; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; } 
-  .actions .star { color: #fbc02d; &:hover { background: #fff9c4; } } 
-  .actions .edit { color: #1976D2; &:hover { background: #E3F2FD; } } 
-  .actions .delete { color: #d32f2f; &:hover { background: #ffebee; } } 
-`;
-
-// OTP Modal Specific
+const AddressCard = styled.div` display: flex; justify-content: space-between; align-items: flex-start; padding: 1rem; border: 2px solid ${props => props.$isDefault ? '#4caf50' : '#eee'}; border-radius: 12px; background: ${props => props.$isDefault ? '#f1f8e9' : 'white'}; .info strong { display: flex; align-items: center; gap: 0.5rem; color: #333; } .info p { margin: 0.5rem 0 0 0; color: #666; font-size: 0.95rem; line-height: 1.4; white-space: pre-wrap; } .badge { background: #4caf50; color: white; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 12px; text-transform: uppercase; } .actions { display: flex; gap: 0.2rem; } .actions button { background: none; border: none; cursor: pointer; padding: 0.5rem; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; } .actions .star { color: #fbc02d; &:hover { background: #fff9c4; } } .actions .edit { color: #1976D2; &:hover { background: #E3F2FD; } } .actions .delete { color: #d32f2f; &:hover { background: #ffebee; } } `;
 const OtpInput = styled.input` width: 100%; text-align: center; font-size: 2rem; letter-spacing: 0.5rem; font-weight: bold; padding: 1rem; border: 2px solid #e0e0e0; border-radius: 12px; margin-top: 1rem; outline: none; &:focus { border-color: #4caf50; box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1); } `;
-
-// Existing Modals & Orders
 const Overlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; backdrop-filter: blur(4px);`;
 const ModalCard = styled(motion.div)` background: white; padding: 2.5rem; border-radius: 20px; width: 100%; max-width: 420px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); h3 { margin-top:0; color:#111; } p { color: #666; }`;
 const ButtonGroup = styled.div` display: flex; gap: 1rem; justify-content: center; `;
 const Stars = styled.div` display: flex; justify-content: center; margin: 1rem 0; gap: 4px; `;
-
 const ModalPrimaryButton = styled.button` flex: 1; padding: 0.8rem 0; border: none !important; border-radius: 8px; cursor: pointer; background: #4caf50 !important; color: white !important; font-weight: bold; &:hover:not(:disabled) { background: #388e3c !important; } &:disabled { background: #a5d6a7 !important; cursor: not-allowed; } `;
 const ModalDangerButton = styled.button` flex: 1; padding: 0.8rem 0; border: none !important; border-radius: 8px; cursor: pointer; background: #d32f2f !important; color: white !important; font-weight: bold; &:hover { background: #b71c1c !important; } `;
 const ModalSecondaryButton = styled.button` flex: 1; padding: 0.8rem 0; border: none !important; border-radius: 8px; cursor: pointer; background: #f5f5f5 !important; color: #424242 !important; font-weight: bold; &:hover:not(:disabled) { background: #e0e0e0 !important; } &:disabled { opacity: 0.7; cursor: not-allowed; } `;
-
 const LoadingWrapper = styled.div` display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 4rem; `;
 const Spinner = styled.div` width: 50px; height: 50px; border: 5px solid #e0e0e0; border-top: 5px solid #2e7d32; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; @keyframes spin { to { transform: rotate(360deg); } } `;
 const LoadingText = styled.div` font-size: 1.3rem; font-weight: 600; color: #4caf50; `;
@@ -699,5 +620,9 @@ const ReviewTriggerButton = styled.button` display: flex; align-items: center; g
 const ReviewItemCard = styled.li` background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.1); display: flex; flex-direction: column; gap: 1.5rem; @media (min-width: 600px) { flex-direction: row; justify-content: space-between; align-items: flex-start; }`;
 const ReviewContent = styled.div` flex: 1; min-width: 0; `;
 const ReviewActions = styled.div` display: flex; gap: 0.5rem; align-items: flex-start; white-space: nowrap; `;
+// Pagination Styles
+const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2rem; padding-bottom: 1rem; `;
+const PageButton = styled.button` padding: 0.6rem 1.2rem; border-radius: 8px; border: none; font-weight: bold; background: ${props => props.disabled ? '#e0e0e0' : '#4caf50'}; color: ${props => props.disabled ? '#9e9e9e' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; &:hover:not(:disabled) { background: #388e3c; } `;
+const PageInfo = styled.span` font-weight: bold; color: #555; background: #f5f5f5; padding: 0.6rem 1rem; border-radius: 8px; `;
 
 export default Dashboard;

@@ -212,11 +212,11 @@ const NavLink = styled(motion(Link))`
 
 const UserDropdownContainer = styled.div` position: relative; `;
 
-const UserButton = styled(motion.button)`
-  color: #1b5e20; background: #e8f5e9; font-size: 1rem; font-weight: 600; padding: 0.5rem 1.1rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; border: 1px solid #c8e6c9; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1);
-  @media (max-width: 480px) { padding: 0.4rem 0.5rem; gap: 0.3rem; font-size: 0.9rem; }
-  &:hover { background: #c8e6c9; }
-`;
+// //  const NavLink = styled(motion.create(Link))`
+// //   color: #1b5e20; background: #e8f5e9; font-size: 1rem; font-weight: 600; padding: 0.5rem 1.1rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; border: 1px solid #c8e6c9; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1);
+// //   @media (max-width: 480px) { padding: 0.4rem 0.5rem; gap: 0.3rem; font-size: 0.9rem; }
+// //   &:hover { background: #c8e6c9; }
+// `;
 
 const UsernameText = styled.span`
   max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -237,5 +237,22 @@ const InfoItem = styled.div`
 const DropdownButton = styled(motion.button)` background: #f5f5f5; border: none; padding: 0.8rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s ease; font-size: 0.95rem; color: #424242; margin-top: 0.5rem; &:hover { background: #e0e0e0; } svg { color: #2e7d32; } `;
 const DropdownDivider = styled.div` height: 1px; background: #e0e0e0; margin: 0.5rem 0; `;
 const LogoutButton = styled(motion.button)` color: white; background: #2e7d32; border: none; font-size: 0.95rem; font-weight: 600; padding: 0.8rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; transition: all 0.3s ease; margin-top: 0.5rem; &:hover { background: #1b5e20; } `;
+const UserButton = styled(motion.button)`
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2e7d32;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: background 0.3s ease;
 
+  &:hover {
+    background: #e8f5e9;
+  }
+`;
 export default Navbar;

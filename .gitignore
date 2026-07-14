@@ -19,6 +19,9 @@ db.sqlite3-journal
 media/
 staticfiles/
 locustfile.py
+cypress
+cypress.config.js
+frontend/src/pages/.test.jsx
 # Environment Variables
 .env
 .env.*

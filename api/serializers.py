@@ -7,7 +7,8 @@ from .models import (
     User, Category, Product, Cart, CartItem, Order, 
     OrderItem, Review, Wishlist, Coupon, Payment, AdminLog, Address
 )
-
+import threading
+from .email_service import send_welcome_email
 # ==========================================
 # 1. USERS & AUTHENTICATION
 # ==========================================
@@ -33,6 +34,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create(username=validated_data['username'], email=validated_data['email'])
         user.set_password(validated_data['password'])
         user.save()
+    
+        # 🚀 The New Welcome Email Trigger
+        import threading
+        from .email_service import send_welcome_email
+        threading.Thread(target=send_welcome_email, args=(user.email, user.username)).start()
+    
         return user
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):

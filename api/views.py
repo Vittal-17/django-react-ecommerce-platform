@@ -29,7 +29,8 @@ from .serializers import (
     CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
-from .email_service import send_transactional_email
+from .email_service import send_otp_email
+from .email_service import send_order_email
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 12 
@@ -53,7 +54,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
-
+    pagination_class = StandardResultsSetPagination
     def get_serializer_class(self):
         if self.action in ['update', 'partial_update']:
             return UserProfileUpdateSerializer
@@ -67,11 +68,7 @@ class UserViewSet(viewsets.ModelViewSet):
         otp_code = str(random.randint(100000, 999999))
         cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
         
-        send_transactional_email(
-            to_email=user.email,
-            subject="Your ShopEazy Security Code",
-            text_content=f"Hello {user.username}, your code is: {otp_code}. Expires in 5 minutes."
-        )
+        send_otp_email(user.email, user.username, otp_code)
         return Response({"message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
@@ -268,7 +265,16 @@ class OrderViewSet(viewsets.ModelViewSet):
             subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
             body = f"Hello {order.user.username},\n\nThere is an update on your ShopEazy order #{order.id}.\nStatus: {order.status.upper()}\nTotal: ${order.total_price}\n\nPayment: {payment_method_display}\nTransaction ID: {transaction_id_display}\n\nDelivery to: {order.shipping_address or 'Saved Address'}\n\nThank you!"
             
-            send_transactional_email(order.user.email, subject, body)
+            send_order_email(
+    to_email=order.user.email,
+    username=order.user.username,
+    order_id=order.id,
+    status=order.status,
+    total=order.total_price,
+    payment_method=payment_method_display,
+    txn_id=transaction_id_display,
+    address=order.shipping_address or 'Saved Address'
+)
         except Exception as e:
             print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
 
@@ -286,8 +292,12 @@ class OrderViewSet(viewsets.ModelViewSet):
                 product.stock += item.quantity
                 product.save()
                 
+        # Log it if an admin did it
         if getattr(request.user, 'role', '') == 'admin':
             log_admin_action(request.user, f"Cancelled Order #{order.id}")
+            
+        # 🔥 THE FIX: Always send the email, regardless of who cancelled it
+        self.send_order_status_email(order)
             
         return Response({"message": "Order cancelled."}, status=status.HTTP_200_OK)
 
@@ -338,9 +348,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.select_related('user', 'product').all()
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
-    
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['product'] # Now React can fetch reviews for a specific product cleanly
+    filterset_fields = ['product', 'user']
 
     def get_permissions(self):
         if self.action in ['destroy']:
@@ -380,7 +390,7 @@ class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
     serializer_class = CouponSerializer
     permission_classes = [IsAdminUser]
-
+    pagination_class = StandardResultsSetPagination
     def perform_create(self, serializer):
         instance = serializer.save()
         log_admin_action(self.request.user, f"Created Promo Code: '{instance.code}' ({instance.discount_percent}% off)")
@@ -401,7 +411,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('order').all()
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
-    
+    pagination_class = StandardResultsSetPagination
     def perform_update(self, serializer):
         instance = self.get_object()
         old_status = instance.status
@@ -413,3 +423,4 @@ class AdminLogViewSet(viewsets.ModelViewSet):
     queryset = AdminLog.objects.select_related('admin').all().order_by('-timestamp')
     serializer_class = AdminLogSerializer
     permission_classes = [IsAdminUser]
+    pagination_class = StandardResultsSetPagination

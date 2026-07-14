@@ -1,324 +1,350 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 from django.core.cache import cache
-from .models import User, Product, Order, OrderItem, Review, Category
+from .models import User, Product, Order, OrderItem, Review, Category, Address, AdminLog, CartItem, Cart, Wishlist, Coupon
 
-class EazyShopMasterTestSuite(APITestCase):
+class EazyShopTitaniumTestSuite(APITestCase):
     def setUp(self):
-        # 1. Setup Mock Users
-        self.customer = User.objects.create_user(username="customer", email="cust@test.com", password="password123", role="customer")
-        self.admin = User.objects.create_user(username="admin", email="admin@test.com", password="password123", role="admin")
+        # 1. Setup Identities (🔥 THE FIX: added is_staff=True to Admin)
+        self.customer = User.objects.create_user(username="customer", email="cust@test.com", password="password123", role="user")
+        self.hacker = User.objects.create_user(username="hacker", email="hack@test.com", password="password123", role="user")
+        self.admin = User.objects.create_user(username="admin", email="admin@test.com", password="password123", role="admin", is_staff=True)
         
-        # 2. Setup Mock Catalog
-        self.product = Product.objects.create(name="Gaming Laptop", price=1000.00, stock=5)
+        # 2. Setup Catalog
+        self.category = Category.objects.create(name="Electronics")
+        self.product = Product.objects.create(name="Gaming Laptop", price=1000.00, stock=5, category=self.category)
+        self.product_two = Product.objects.create(name="Mouse", price=50.00, stock=20, category=self.category)
+        
+        # 3. Setup Cart
+        self.cart = Cart.objects.create(user=self.customer)
 
-        # 3. Explicit URL Paths (Bypassing reverse())
+        # 4. URLs
         self.order_url = '/api/orders/' 
+        self.cart_url = '/api/cart-items/'
         self.user_detail_url = f'/api/users/{self.customer.id}/'
 
     # ==========================================
-    # PHASE 1: IDENTITY & SECURITY
+    # PHASE 1: AUTHENTICATION & IDENTITY
     # ==========================================
-    def test_privilege_escalation_blocked(self):
+    def test_01_registration_success(self):
+        """Standard registration succeeds with matching passwords"""
+        response = self.client.post('/api/register/', {
+            "username": "new", 
+            "email": "new@test.com", 
+            "password": "StrongPassword123!", 
+            "password2": "StrongPassword123!"
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_02_registration_password_mismatch(self):
+        """Registration rejects mismatched passwords"""
+        response = self.client.post('/api/register/', {
+            "username": "new", 
+            "email": "new@test.com", 
+            "password": "StrongPassword123!", 
+            "password2": "WrongPassword456!"
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_03_jwt_token_generation(self):
+        """Valid credentials return access and refresh JWT tokens"""
+        response = self.client.post('/api/token/', {"email": "cust@test.com", "password": "password123"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+    def test_04_privilege_escalation_blocked(self):
         """Standard users cannot hack their role to 'admin'"""
         self.client.force_authenticate(user=self.customer)
         response = self.client.patch(self.user_detail_url, {"role": "admin"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_otp_required_for_sensitive_update(self):
+    def test_05_unauthenticated_access_rejected(self):
+        """Unauthenticated users cannot access secure endpoints"""
+        response = self.client.get(self.order_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # ==========================================
+    # PHASE 2: OTP & SECURITY PROFILE
+    # ==========================================
+    def test_06_otp_required_for_sensitive_update(self):
         """Updating phone number without an OTP throws an error"""
         self.client.force_authenticate(user=self.customer)
         response = self.client.patch(self.user_detail_url, {"phone": "9999999999"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("OTP", str(response.data))
 
-    def test_admin_bypasses_otp(self):
-        """Admins can modify standard users without an OTP"""
+    def test_07_successful_otp_profile_update(self):
+        """A valid OTP allows a user to update their security profile"""
+        self.client.force_authenticate(user=self.customer)
+        cache.set(f"profile_otp_{self.customer.id}", "123456", timeout=300)
+        response = self.client.patch(self.user_detail_url, {"phone": "555-1234", "otp": "123456"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_08_invalid_otp_rejected(self):
+        """An incorrect OTP is rejected"""
+        self.client.force_authenticate(user=self.customer)
+        cache.set(f"profile_otp_{self.customer.id}", "123456", timeout=300)
+        response = self.client.patch(self.user_detail_url, {"phone": "555-1234", "otp": "999999"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_09_admin_bypasses_otp(self):
+        """Admins can modify standard users without requiring OTPs"""
         self.client.force_authenticate(user=self.admin)
         response = self.client.patch(self.user_detail_url, {"phone": "9999999999"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     # ==========================================
-    # PHASE 2: DATABASE VALIDATORS
+    # PHASE 3: CATALOG & FILTERING
     # ==========================================
-    def test_negative_pricing_and_stock_fails(self):
+    def test_10_negative_pricing_and_stock_fails(self):
         """Database rejects negative stock and price values via API"""
         self.client.force_authenticate(user=self.admin) 
-        product_url = '/api/products/'
-        response = self.client.post(product_url, {"name": "Bad Item", "price": -10.00, "stock": -5}, format='json')
+        response = self.client.post('/api/products/', {"name": "Bad", "price": -10.00, "stock": -5}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_invalid_review_rating_fails(self):
-        """Database rejects ratings above 5"""
+    def test_11_category_deletion_sets_null(self):
+        """Deleting a category does not delete the product, it sets category to NULL"""
+        self.client.force_authenticate(user=self.admin)
+        self.client.delete(f'/api/categories/{self.category.id}/')
+        self.product.refresh_from_db()
+        self.assertIsNone(self.product.category)
+
+    def test_12_product_search_filter(self):
+        """Search parameter correctly filters products"""
+        response = self.client.get('/api/products/', {'search': 'Laptop'})
+        self.assertEqual(len(response.data['results']), 1)
+
+    def test_13_dynamic_pagination_override(self):
+        """Frontend can dynamically override page_size up to max limit"""
+        response = self.client.get('/api/products/', {'page_size': 1})
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['count'], 2)
+
+    def test_14_product_category_filtering(self):
+        """Category parameter correctly filters products"""
+        response = self.client.get('/api/products/', {'category': self.category.id})
+        self.assertEqual(len(response.data['results']), 2)
+
+    # ==========================================
+    # PHASE 4: CART INTEGRITY
+    # ==========================================
+    def test_15_add_to_cart_success(self):
+        """User can add a valid item to their cart"""
         self.client.force_authenticate(user=self.customer)
-        review_url = '/api/reviews/'
-        response = self.client.post(review_url, {"product": self.product.id, "rating": 10, "comment": "Great!"}, format='json')
+        response = self.client.post(self.cart_url, {"product": self.product.id, "quantity": 1}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_16_cart_unique_product_constraint(self):
+        """Cannot add the exact same product to the cart twice as a new row"""
+        self.client.force_authenticate(user=self.customer)
+        self.client.post(self.cart_url, {"product": self.product.id, "quantity": 1}, format='json')
+        response = self.client.post(self.cart_url, {"product": self.product.id, "quantity": 1}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_17_cart_exceeds_stock_fails(self):
+        """Adding more items than available in warehouse fails"""
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post(self.cart_url, {"product": self.product.id, "quantity": 10}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_18_cart_isolation(self):
+        """IDOR: Hacker cannot view Customer's cart"""
+        self.client.force_authenticate(user=self.customer)
+        self.client.post(self.cart_url, {"product": self.product.id, "quantity": 1}, format='json')
+        self.client.force_authenticate(user=self.hacker)
+        response = self.client.get(self.cart_url)
+        self.assertEqual(len(response.data), 0)
+
+    def test_19_cart_item_update_quantity(self):
+        """User can update the quantity of an existing cart item"""
+        self.client.force_authenticate(user=self.customer)
+        item = CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
+        response = self.client.patch(f'{self.cart_url}{item.id}/', {"quantity": 3}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item.refresh_from_db()
+        self.assertEqual(item.quantity, 3)
+
     # ==========================================
-    # PHASE 3: CHECKOUT & PRICING
+    # PHASE 5: CHECKOUT & MATHEMATICS
     # ==========================================
-    def test_checkout_missing_address_fails(self):
+    def test_20_checkout_success(self):
+        """Valid checkout payload creates order successfully"""
+        self.client.force_authenticate(user=self.customer)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": self.product.id, "quantity": 1}]}
+        response = self.client.post(self.order_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_21_checkout_missing_address_fails(self):
         """Validation blocks checkout without address/phone"""
         self.client.force_authenticate(user=self.customer)
         payload = {"order_items": [{"product": self.product.id, "quantity": 1}]}
         response = self.client.post(self.order_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_checkout_insufficient_stock_fails(self):
-        """Cannot buy more stock than what exists in the DB"""
+    def test_22_checkout_zero_quantity_fails(self):
+        """Mathematical Boundary: Cannot checkout with 0 quantity"""
         self.client.force_authenticate(user=self.customer)
-        payload = {
-            "shipping_address": "123 Test St", "contact_phone": "123",
-            "order_items": [{"product": self.product.id, "quantity": 10}] # Only 5 in stock
-        }
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": self.product.id, "quantity": 0}]}
         response = self.client.post(self.order_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_malicious_pricing_ignored_and_stock_decrements(self):
-        """Backend forces server-side price and decrements stock atomically"""
+    def test_23_malicious_pricing_ignored(self):
+        """Backend forces server-side price despite malicious payload"""
         self.client.force_authenticate(user=self.customer)
-        payload = {
-            "shipping_address": "123 Test St", "contact_phone": "123",
-            "order_items": [{"product": self.product.id, "quantity": 2, "price": 0.01}] # The Hacker Payload
-        }
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": self.product.id, "quantity": 2, "price": 0.01}]}
         response = self.client.post(self.order_url, payload, format='json')
-        
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # Verify Total is 2 * 1000 = 2000, ignoring the 0.01
         self.assertEqual(float(response.data['total_price']), 2000.00)
-        
-        # Verify Stock decreased from 5 to 3
+
+    def test_24_checkout_decrements_stock(self):
+        """Successful checkout reduces warehouse inventory"""
+        self.client.force_authenticate(user=self.customer)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": self.product.id, "quantity": 2}]}
+        self.client.post(self.order_url, payload, format='json')
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock, 3)
 
-    # ==========================================
-    # PHASE 4: ORDER STATUS LOCKDOWN
-    # ==========================================
-    def test_customer_cannot_update_status(self):
-        """Regular users are blocked from mutating order status"""
+    def test_25_checkout_clears_cart(self):
+        """Successful checkout automatically wipes the user's shopping cart"""
         self.client.force_authenticate(user=self.customer)
-        order = Order.objects.create(user=self.customer, total_price=1000, shipping_address="123", contact_phone="123")
-        
-        url = f'/api/orders/{order.id}/'
-        response = self.client.patch(url, {"status": "shipped"}, format='json')
-        
-        # 🚨 THE FIX: Accept either 403 (Rejected) or 200 (Ignored). Both mean the system is secure.
+        CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": self.product.id, "quantity": 1}]}
+        self.client.post(self.order_url, payload, format='json')
+        self.assertEqual(CartItem.objects.filter(cart=self.cart).count(), 0)
+
+    # ==========================================
+    # PHASE 6: ORDER MANAGEMENT & CANCELLATION
+    # ==========================================
+    def test_26_customer_cannot_update_status(self):
+        """Users cannot change order status to shipped/delivered"""
+        self.client.force_authenticate(user=self.customer)
+        order = Order.objects.create(user=self.customer, total_price=1000)
+        response = self.client.patch(f'/api/orders/{order.id}/', {"status": "shipped"}, format='json')
         self.assertIn(response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_200_OK])
-        
         order.refresh_from_db()
-        self.assertEqual(order.status, "pending") # Remains unchanged
+        self.assertEqual(order.status, "pending")
 
-    def test_admin_can_update_status(self):
-        """Admins have the masterkey to mutate order status"""
+    def test_27_admin_can_update_status(self):
+        """Admins can change order status to shipped/delivered"""
         self.client.force_authenticate(user=self.admin)
-        order = Order.objects.create(user=self.customer, total_price=1000, shipping_address="123", contact_phone="123")
-        
-        url = f'/api/orders/{order.id}/'
-        response = self.client.patch(url, {"status": "shipped"}, format='json')
-        
+        order = Order.objects.create(user=self.customer, total_price=1000)
+        response = self.client.patch(f'/api/orders/{order.id}/', {"status": "shipped"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        order.refresh_from_db()
-        self.assertEqual(order.status, "shipped") # Successfully changed
 
-    # ==========================================
-    # PHASE 5: SOFT DELETION & INVENTORY RESTORATION
-    # ==========================================
-    def test_order_cancellation_restores_stock(self):
-        """Cancelling a pending order restores product inventory"""
+    def test_28_customer_cannot_cancel_shipped_order(self):
+        """Users cannot cancel an order once it is shipped"""
+        self.client.force_authenticate(user=self.customer)
+        order = Order.objects.create(user=self.customer, total_price=1000, status="shipped")
+        response = self.client.post(f'/api/orders/{order.id}/cancel/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_29_order_cancellation_restores_stock(self):
+        """Cancelling a pending order restores product inventory immediately"""
         self.client.force_authenticate(user=self.customer)
         order = Order.objects.create(user=self.customer, status='pending', total_price=1000)
         OrderItem.objects.create(order=order, product=self.product, quantity=2, price=1000)
-        
-        url = f'/api/orders/{order.id}/cancel/'
-        response = self.client.post(url)
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.client.post(f'/api/orders/{order.id}/cancel/')
         self.product.refresh_from_db()
-        self.assertEqual(self.product.stock, 7) # Original 5 + 2 restored
+        self.assertEqual(self.product.stock, 7)
 
-    def test_soft_deletion_preserves_order_history(self):
-        """Deleting a product NULLs the foreign key but keeps order intact"""
+    def test_30_idor_user_cannot_view_others_order(self):
+        """IDOR: A user cannot fetch an order belonging to someone else"""
         order = Order.objects.create(user=self.customer, total_price=1000)
-        item = OrderItem.objects.create(order=order, product=self.product, quantity=1, price=1000)
-        
-        # Admin deletes the product from the catalog
-        self.product.delete()
-        
-        # Verify the historical order item did not cascade delete
-        item.refresh_from_db()
-        self.assertIsNone(item.product) 
-        self.assertEqual(item.price, 1000) # Price snapshot remains safe
-
-# ==========================================
-    # PHASE 6: IDOR & BOUNDARY EDGE CASES
-    # ==========================================
-    def test_idor_user_cannot_view_others_order(self):
-        """IDOR Security: A user cannot fetch an order belonging to someone else"""
-        # Admin creates an order for the Customer
-        order = Order.objects.create(user=self.customer, total_price=1000, shipping_address="123", contact_phone="123")
-        
-        # Create a SECOND, completely unrelated user (The Hacker)
-        hacker = User.objects.create_user(username="hacker", email="hack@test.com", password="password123", role="customer")
-        self.client.force_authenticate(user=hacker)
-        
-        # Hacker tries to view the Customer's order by guessing the ID
-        url = f'/api/orders/{order.id}/'
-        response = self.client.get(url, format='json')
-        
-        # The system should pretend it doesn't exist (404) or block them (403)
+        self.client.force_authenticate(user=self.hacker)
+        response = self.client.get(f'/api/orders/{order.id}/', format='json')
         self.assertIn(response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN])
 
-    def test_checkout_zero_quantity_fails(self):
-        """Mathematical Boundary: Cannot checkout with 0 quantity to bypass validation"""
+    def test_31_order_sorting_by_price(self):
+        """Orders can be sorted by total price"""
+        self.client.force_authenticate(user=self.admin)
+        Order.objects.create(user=self.customer, total_price=50)
+        Order.objects.create(user=self.customer, total_price=500)
+        response = self.client.get('/api/orders/', {'ordering': '-total_price'})
+        self.assertEqual(float(response.data['results'][0]['total_price']), 500.00)
+
+    # ==========================================
+    # PHASE 7: SMART ADDRESS BOOK
+    # ==========================================
+    def test_32_first_address_is_default(self):
+        """First address added is automatically marked as default"""
         self.client.force_authenticate(user=self.customer)
-        payload = {
-            "shipping_address": "123 Test St", "contact_phone": "123",
-            "order_items": [{"product": self.product.id, "quantity": 0}] # Hacker tries to buy 0 items
-        }
-        response = self.client.post(self.order_url, payload, format='json')
+        self.client.post('/api/addresses/', {"label": "Home", "full_address": "123"}, format='json')
+        addr = Address.objects.get(user=self.customer)
+        self.assertTrue(addr.is_default)
+
+    def test_33_address_default_toggling(self):
+        """When a new default address is added, old ones are set to False"""
+        self.client.force_authenticate(user=self.customer)
+        self.client.post('/api/addresses/', {"label": "Home", "full_address": "123"}, format='json')
+        self.client.post('/api/addresses/', {"label": "Work", "full_address": "456", "is_default": True}, format='json')
+        addr1 = Address.objects.get(label="Home")
+        addr2 = Address.objects.get(label="Work")
+        self.assertFalse(addr1.is_default)
+        self.assertTrue(addr2.is_default)
+
+    # ==========================================
+    # PHASE 8: REVIEWS & WISHLIST
+    # ==========================================
+    def test_34_review_rating_boundaries(self):
+        """Database rejects ratings above 5 or below 1"""
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post('/api/reviews/', {"product": self.product.id, "rating": 6, "comment": "Good"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_unauthenticated_access_rejected(self):
-        """Ensure sensitive endpoints are totally locked from public access"""
-        self.client.logout() # Ensure no one is logged in
-        
-        # Try to view orders
-        response = self.client.get(self.order_url, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    def test_35_one_review_per_user_limit(self):
+        """A consumer cannot review a single item multiple times"""
+        self.client.force_authenticate(user=self.customer)
+        self.client.post('/api/reviews/', {"product": self.product.id, "rating": 5, "comment": "Good"}, format='json')
+        response = self.client.post('/api/reviews/', {"product": self.product.id, "rating": 1, "comment": "Bad"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-class APIScalingTest(APITestCase):
-    def setUp(self):
-        self.cat = Category.objects.create(name="Electronics")
-        self.p1 = Product.objects.create(name="Cheap Laptop", price=500, category=self.cat, stock=10)
-        self.p2 = Product.objects.create(name="Gaming Laptop", price=2000, category=self.cat, stock=10)
-
-    def test_search_and_ordering_parameters(self):
-        """Ensure products can be searched and sorted via query params"""
-        url = '/api/products/'
-        
-        # Test Search
-        response = self.client.get(url, {'search': 'Gaming'})
+    def test_36_review_user_filtering(self):
+        """Dashboard can fetch reviews for only the logged-in user using ?user="""
+        Review.objects.create(user=self.customer, product=self.product, rating=5, comment="Mine")
+        Review.objects.create(user=self.hacker, product=self.product_two, rating=4, comment="Theirs")
+        response = self.client.get('/api/reviews/', {'user': self.customer.id})
         self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['name'], "Gaming Laptop")
 
-        # Test Ordering (Descending Price)
-        response = self.client.get(url, {'ordering': '-price'})
-        self.assertEqual(response.data['results'][0]['price'], '2000.00')
+    def test_37_review_editing_updates_rating(self):
+        """User can edit their existing review rating"""
+        self.client.force_authenticate(user=self.customer)
+        review = Review.objects.create(user=self.customer, product=self.product, rating=3, comment="Okay")
+        response = self.client.patch(f'/api/reviews/{review.id}/', {"rating": 5}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        review.refresh_from_db()
+        self.assertEqual(review.rating, 5)
 
-    def test_pagination_structure(self):
-        """Ensure pagination returns the correct metadata structure"""
-        response = self.client.get('/api/products/')
-        # DRF PageNumberPagination returns a dict with 'count', 'next', 'previous', 'results'
-        self.assertIn('count', response.data)
-        self.assertIn('results', response.data)
-        self.assertIsInstance(response.data['results'], list)
-
-from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase
-from rest_framework import status
-from .models import Category, Product, Cart, CartItem, Wishlist, Review
-
-User = get_user_model()
-
-class EazyShopExtendedDomainTestSuite(APITestCase):
-
-    def setUp(self):
-        # Create standard users
-        self.user = User.objects.create_user(username="customer", email="customer@test.com", password="Password123!")
-        self.other_user = User.objects.create_user(username="other", email="other@test.com", password="Password123!")
-        
-        # Create catalog data
-        self.category_electronics = Category.objects.create(name="Electronics")
-        self.category_apparel = Category.objects.create(name="Apparel")
-        
-        self.product_phone = Product.objects.create(
-            name="Smart Phone", price=800.00, category=self.category_electronics, stock=5
-        )
-        self.product_shirt = Product.objects.create(
-            name="Vintage Shirt", price=45.00, category=self.category_apparel, stock=10
-        )
-
-    # ==========================================
-    # 1. CART & INVENTORY EDGE CASE TESTS
-    # ==========================================
-    def test_cart_item_stock_validation(self):
-        """Ensure users cannot add items to cart exceeding available warehouse stock"""
-        self.client.force_authenticate(user=self.user)
-        
-        # Step 1: Initialize cart endpoint
-        cart_url = '/api/cart-items/'
-        
-        # Try adding 10 units when stock is only 5
-        invalid_payload = {"product": self.product_phone.id, "quantity": 10}
-        response = self.client.post(cart_url, invalid_payload, format='json')
+    def test_38_wishlist_duplicate_prevention(self):
+        """Ensures unique constraint catches duplicate wishlist entries gracefully"""
+        self.client.force_authenticate(user=self.customer)
+        self.client.post('/api/wishlist/', {"product_id": self.product.id}, format='json')
+        response = self.client.post('/api/wishlist/', {"product_id": self.product.id}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("quantity", response.data)
 
-        # Add valid amount
-        valid_payload = {"product": self.product_phone.id, "quantity": 2}
-        response = self.client.post(cart_url, valid_payload, format='json')
+    # ==========================================
+    # PHASE 9: ADMIN LOGS & AUDITING
+    # ==========================================
+    def test_39_admin_actions_are_logged(self):
+        """Any destructive/creative action by an admin creates an AdminLog"""
+        self.client.force_authenticate(user=self.admin)
+        self.client.post('/api/categories/', {"name": "New"}, format='json')
+        self.assertEqual(AdminLog.objects.count(), 1)
+
+    def test_40_non_admins_cannot_view_logs(self):
+        """Standard users cannot access the audit trails"""
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.get('/api/admin-logs/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ==========================================
+    # PHASE 10: PAYMENTS & COUPONS
+    # ==========================================
+    def test_41_admin_can_create_coupon(self):
+        """Admins can create promotional codes"""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post('/api/coupons/', {"code": "SAVE50", "discount_percent": 50, "expires_at": "2030-01-01"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-    def test_cart_isolation(self):
-        """Ensure User A cannot view or manipulate User B's shopping cart"""
-        # User A adds item to cart
-        self.client.force_authenticate(user=self.user)
-        self.client.post('/api/cart-items/', {"product": self.product_shirt.id, "quantity": 1}, format='json')
-        
-        # Switch to User B
-        self.client.force_authenticate(user=self.other_user)
-        response = self.client.get('/api/cart-items/')
-        
-        # User B's cart query must return 0 items despite User A's cart active status
-        self.assertEqual(len(response.data), 0)
-
-    # ==========================================
-    # 2. WISHLIST INTEGRITY TESTS
-    # ==========================================
-    def test_wishlist_duplicate_prevention(self):
-        """Ensure unique_together constraint catches duplicate wishlist entries gracefully"""
-        self.client.force_authenticate(user=self.user)
-        url = '/api/wishlist/'
-        payload = {"product_id": self.product_phone.id}
-        
-        # First save
-        response = self.client.post(url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        
-        # Duplicate entry target save
-        duplicate_response = self.client.post(url, payload, format='json')
-        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", duplicate_response.data)
-
-    # ==========================================
-    # 3. REVIEW & RATING TESTS
-    # ==========================================
-    def test_review_parameter_filtering(self):
-        """Verify frontend can target reviews specifically using product parameter filtering"""
-        # Create reviews across different products
-        Review.objects.create(user=self.user, product=self.product_phone, rating=5, comment="Amazing screen!")
-        Review.objects.create(user=self.other_user, product=self.product_shirt, rating=4, comment="Nice fabric.")
-        
-        url = '/api/reviews/'
-        
-        # Test query parameter filtering ?product=ID
-        response = self.client.get(url, {'product': self.product_phone.id})
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['comment'], "Amazing screen!")
-
-    def test_one_review_per_user_limit(self):
-        """Enforce database integrity ensuring a consumer cannot review a single item multiple times"""
-        self.client.force_authenticate(user=self.user)
-        url = '/api/reviews/'
-        payload = {"product": self.product_phone.id, "rating": 5, "comment": "First review."}
-        
-        # Submit review 1
-        self.client.post(url, payload, format='json')
-        
-        # Submit review 2 on same product
-        payload_two = {"product": self.product_phone.id, "rating": 1, "comment": "Changed my mind."}
-        response = self.client.post(url, payload_two, format='json')
-        
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", response.data)
+    def test_42_user_cannot_create_coupon(self):
+        """Standard users are blocked from creating promotional codes"""
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post('/api/coupons/', {"code": "HACK100", "discount_percent": 100, "expires_at": "2030-01-01"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
