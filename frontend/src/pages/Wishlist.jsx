@@ -7,10 +7,12 @@ import AuthContext from '../context/AuthContext';
 import { FaTrashAlt, FaShoppingCart, FaArrowRight } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
+import { SkeletonProductCard } from '../components/SkeletonLoader'; // 🚀 Added import
 
 const Wishlist = () => {
   const { axiosInstance } = useContext(AuthContext);
   const [wishlist, setWishlist] = useState([]);
+  const [isLoading, setIsLoading] = useState(true); // 🚀 Added loading state
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,6 +24,7 @@ const Wishlist = () => {
   }, []);
 
   const fetchWishlist = async () => {
+    setIsLoading(true);
     try {
       const res = await axiosInstance.get('/api/wishlist/');
       const validItems = res.data.filter(item => item.product && item.product.id && item.product.name);
@@ -36,6 +39,8 @@ const Wishlist = () => {
     } catch (err) {
       console.error(err);
       toast.error('❌ Failed to load wishlist');
+    } finally {
+      setIsLoading(false); // 🚀 Stop Skeleton
     }
   };
 
@@ -121,7 +126,12 @@ const Wishlist = () => {
         My Wishlist
       </motion.h1>
 
-      {wishlist.length === 0 ? (
+      {/* 🚀 3-Way Check Included Here! */}
+      {isLoading ? (
+        <WishlistGrid>
+          {[...Array(4)].map((_, index) => <SkeletonProductCard key={index} />)}
+        </WishlistGrid>
+      ) : wishlist.length === 0 ? (
         <EmptyText>Your wishlist is empty.</EmptyText>
       ) : (
         <WishlistGrid>
@@ -131,7 +141,7 @@ const Wishlist = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              whileHover={{ y: -4 }} // Added matching hover animation
+              whileHover={{ y: -4 }} 
             >
               <ImageWrapper>
                 <Link to={`/products/${item.product.id}/`}>
@@ -262,7 +272,6 @@ const Actions = styled.div`
   justify-content: center;
 `;
 
-// Upgraded Action buttons to framer-motion components for animations
 const ActionBtn = styled(motion.button)`
   background: ${props => props.$primary ? '#4CAF50' : '#e53935'};
   color: white;

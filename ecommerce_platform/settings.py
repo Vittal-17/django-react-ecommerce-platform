@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework.authtoken',
     'django_filters',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -181,3 +182,10 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+ANYMAIL = {
+    "SENDINBLUE_API_KEY": config('BREVO_API_KEY'), 
+}
+
+EMAIL_BACKEND = "anymail.backends.sendinblue.EmailBackend"
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')

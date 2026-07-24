@@ -18,8 +18,9 @@ import Navbar from './components/Navbar';
 import Wishlist from './pages/Wishlist';
 import OrderSuccess from './pages/OrderSuccess';
 import AppToaster from './components/AppToaster';
+import VendorDashboard from './pages/VendorDashboard';
 
-// --- ADDED: ScrollToTop Component ---
+// --- ScrollToTop Component ---
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -33,13 +34,12 @@ function ScrollToTop() {
 function AppContent() {
   return (
     <>
-      {/* MOUNTED HERE: Will silently intercept route changes and snap to top */}
       <ScrollToTop />
-      
-      <AppToaster/>
+      <AppToaster />
       <Navbar />
       <ServerWakeup />
 
+      {/* 🚀 Cleaned out AnimatePresence and AnimatedPage so nothing blocks your spinner! */}
       <Routes>
         <Route path="/" element={<Layout />} />
         <Route index element={<Home />} />
@@ -51,24 +51,10 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/wishlist" element={<Wishlist />} />
-
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute adminOnly>
-              <AdminPanel />
-            </ProtectedRoute>
-          }
-        />
+        
+        <Route path="/vendor" element={ <ProtectedRoute><VendorDashboard /></ProtectedRoute> } />
+        <Route path="/dashboard" element={ <ProtectedRoute><Dashboard /></ProtectedRoute> } />
+        <Route path="/admin" element={ <ProtectedRoute adminOnly><AdminPanel /></ProtectedRoute> } />
       </Routes>
     </>
   );

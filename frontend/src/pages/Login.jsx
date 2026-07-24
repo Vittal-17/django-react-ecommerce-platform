@@ -1,11 +1,12 @@
 import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
 import { useNavigate, Link , useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 // eslint-disable-next-line
 import {toast, Toaster} from "react-hot-toast";
 import styled from 'styled-components';
-
+import GreenSpinner from '../components/GreenSpinner';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 const Login = () => {
   const { loginUser } = useContext(AuthContext);
@@ -20,14 +21,11 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    setIsLoading(true);
+    setIsLoading(true); // 🚀 Screen locks instantly
 
     if (!email || !password) {
-      toast.error("❌ Please fill in all fields", { 
-        duration: 3000,
-        id: 'empty-fields'
-      });
       setIsLoading(false);
+      setTimeout(() => toast.error("❌ Please fill in all fields", { id: 'empty-fields' }), 250);
       return;
     }
 
@@ -35,91 +33,93 @@ const Login = () => {
       const success = await loginUser(email, password);
 
       if (success === true) {
-        toast.success('✅ Login successful! Redirecting...', {
-          duration: 2000,
-          id: 'login-success',
-        });
-
+        // Wait 1.5 seconds to show off the secure animation
         setTimeout(() => {
-  navigate(from);
-}, 2000);
-
+          // 🚀 1. Fire the toast
+          toast.success('✅ Login successful!', { duration: 2000, id: 'login-success' });
+          
+          // 🚀 2. Navigate immediately! 
+          // Notice we DO NOT set isLoading to false here. 
+          // Changing the route destroys the login page and the spinner simultaneously, 
+          // completely eliminating that awkward flash!
+          navigate(from);
+        }, 1500); 
 
       } else if (typeof success === 'object') {
         const messages = Object.values(success).flat().join(' ');
-        toast.error(messages || '❌ Login failed', {
-          duration: 3000,
-          id: 'login-error'
-        });
         setErrorMsg(messages);
+        setIsLoading(false);
+        setTimeout(() => toast.error(messages || '❌ Login failed', { id: 'login-error' }), 250);
       } else {
-        toast.error('❌ Invalid credentials', {
-          duration: 3000,
-          id: 'invalid-creds'
-        });
         setErrorMsg('Invalid credentials');
+        setIsLoading(false);
+        setTimeout(() => toast.error('❌ Invalid credentials', { id: 'invalid-creds' }), 250);
       }
     } catch (err) {
-      toast.error('❌ An unexpected error occurred', {
-        duration: 3000,
-        id: 'unexpected-error'
-      });
       setErrorMsg('Unexpected error occurred');
-    } finally {
       setIsLoading(false);
+      setTimeout(() => toast.error('❌ An unexpected error occurred', { id: 'unexpected-error' }), 250);
     }
   };
 
   return (
-    <LoginContainer>
-      
-      <LoginCard
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <Title>Welcome Back</Title>
-        <form onSubmit={handleSubmit}>
-          <InputField
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            whileFocus={{ scale: 1.02 }}
-          />
-          <InputField
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            whileFocus={{ scale: 1.02 }}
-          />
-          <SubmitButton
-            type="submit"
-            disabled={isLoading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {isLoading ? 'Logging in...' : 'Login'}
-          </SubmitButton>
-        </form>
+    <>
+      {/* 🚀 Placed at the absolute root to guarantee it covers the whole screen */}
+      <AnimatePresence>
+        {isLoading && <FullScreenSpinner message="Signing you into EazyShop..." />}
+      </AnimatePresence>
 
-        {errorMsg && (
-          <ErrorText
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            {errorMsg}
-          </ErrorText>
-        )}
+      <LoginContainer>
+        <LoginCard
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Title>Welcome Back</Title>
+          <form onSubmit={handleSubmit}>
+            <InputField
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+            />
+            <InputField
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+            />
+            <SubmitButton
+              type="submit"
+              disabled={isLoading}
+              whileHover={{ scale: isLoading ? 1 : 1.02 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+            >
+              {isLoading ? <GreenSpinner /> : 'Login'}
+            </SubmitButton>
+          </form>
 
-        <RegisterLink>
-          Don't have an account? <Link to="/register" state={{ from }}>Register now</Link>
-        </RegisterLink>
-      </LoginCard>
-    </LoginContainer>
+          {errorMsg && (
+            <ErrorText
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              {errorMsg}
+            </ErrorText>
+          )}
+
+          <RegisterLink>
+            Don't have an account? <Link to="/register" state={{ from }}>Register now</Link>
+          </RegisterLink>
+        </LoginCard>
+      </LoginContainer>
+    </>
   );
 };
 
@@ -177,6 +177,9 @@ const SubmitButton = styled(motion.button)`
   cursor: pointer;
   transition: background 0.3s ease;
   margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   &:hover {
     background: #45a049;

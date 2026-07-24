@@ -1,15 +1,249 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 // eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
 import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
+import FullScreenSpinner from '../components/FullScreenSpinner'; // 🚀 Added FullScreenSpinner
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-// Styled Components
+const Register = () => {
+  const { loginUser } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
+
+  const [form, setForm] = useState({ 
+    username: '', 
+    email: '', 
+    password: '', 
+    password2: '' 
+  });
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [passwordValidation, setPasswordValidation] = useState({
+    length: false,
+    notNumeric: false,
+    notSimilar: false,
+    matches: false
+  });
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handlePasswordFocus = () => {
+    setShowPasswordRules(true);
+    setPasswordFocused(true);
+  };
+
+  const handlePasswordBlur = () => {
+    setPasswordFocused(false);
+    if (form.password === '' && form.password2 === '') {
+      setShowPasswordRules(false);
+    }
+  };
+
+  useEffect(() => {
+    if (passwordFocused) {
+      setPasswordValidation({
+        length: form.password.length >= 8,
+        notNumeric: !/^\d+$/.test(form.password),
+        notSimilar: !form.password.toLowerCase().includes(form.username.toLowerCase()) && 
+                    !form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase()),
+        matches: form.password === form.password2 && form.password2 !== ''
+      });
+    }
+    // eslint-disable-next-line
+  }, [form.password, form.password2, passwordFocused]);
+
+  const validatePassword = () => {
+    const errors = [];
+    
+    if (form.password.length < 8) {
+      errors.push('Your password must contain at least 8 characters.');
+    }
+    if (/^\d+$/.test(form.password)) {
+      errors.push('Your password can\'t be entirely numeric.');
+    }
+    if (form.password.toLowerCase().includes(form.username.toLowerCase()) || 
+        form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase())) {
+      errors.push('Your password can\'t be too similar to your other personal information.');
+    }
+    
+    return errors;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true); // 🚀 Screen locks instantly
+
+    const passwordErrors = validatePassword();
+    if (passwordErrors.length > 0) {
+      setIsLoading(false); // Drop spinner
+      setTimeout(() => {
+        passwordErrors.forEach(error => toast.error(error, { duration: 5000 }));
+      }, 250); // Delay toast to dodge the portal
+      return;
+    }
+
+    if (form.password !== form.password2) {
+      setIsLoading(false);
+      setTimeout(() => toast.error("❌ Passwords don't match", { duration: 5000 }), 250);
+      return;
+    }
+
+    try {
+      const res = await axios.post(`${API_URL}/api/register/`, form);
+      if (res.status === 201) {
+        // Attempt background login
+        const loginSuccess = await loginUser(form.email, form.password);
+        
+        // 🚀 Wait 1.5 seconds to show off the secure animation
+        setTimeout(() => {
+          toast.success('✅ Registration successful!', { duration: 2000 });
+          
+          // 🚀 Navigate immediately WITHOUT setting isLoading to false!
+          // This destroys the page and the spinner at the same exact time.
+          if (loginSuccess) {
+              navigate(from);
+          } else {
+              navigate('/login', { state: { from } });
+          }
+        }, 1500);
+      }
+    } catch (err) {
+      let errorMessage = 'Registration failed';
+      if (err.response) {
+        if (err.response.data.email) {
+          errorMessage = err.response.data.email[0];
+        } else if (err.response.data.username) {
+          errorMessage = err.response.data.username[0];
+        } else if (err.response.data.password) {
+          errorMessage = err.response.data.password[0];
+        }
+      }
+      setIsLoading(false); // Drop spinner
+      setTimeout(() => toast.error(`❌ ${errorMessage}`, { duration: 5000 }), 250);
+    } 
+    // 🚀 REMOVED THE FINALLY BLOCK ENTIRELY!
+  };
+
+  return (
+    <>
+      {/* 🚀 Safely mounted at the top level to guarantee full screen coverage */}
+      <AnimatePresence>
+        {isLoading && <FullScreenSpinner message="Creating your account..." />}
+      </AnimatePresence>
+
+      <RegisterContainer>
+        <RegisterCard
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Title>Create Account</Title>
+          <form onSubmit={handleSubmit}>
+            <InputField
+              type="text"
+              name="username"
+              placeholder="Username"
+              value={form.username}
+              onChange={handleChange}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+            />
+            <InputField
+              type="email"
+              name="email"
+              placeholder="Email"
+              value={form.email}
+              onChange={handleChange}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+            />
+            <InputField
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={form.password}
+              onChange={handleChange}
+              onFocus={handlePasswordFocus}
+              onBlur={handlePasswordBlur}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+            />
+            
+            <PasswordRules $show={showPasswordRules}>
+              <PasswordRule $valid={passwordValidation.length}>
+                <RuleIcon>{passwordValidation.length ? '✓' : '•'}</RuleIcon>
+                At least 8 characters
+              </PasswordRule>
+              <PasswordRule $valid={passwordValidation.notNumeric}>
+                <RuleIcon>{passwordValidation.notNumeric ? '✓' : '•'}</RuleIcon>
+                Not entirely numeric
+              </PasswordRule>
+              <PasswordRule $valid={passwordValidation.notSimilar}>
+                <RuleIcon>{passwordValidation.notSimilar ? '✓' : '•'}</RuleIcon>
+                Not similar to personal info
+              </PasswordRule>
+            </PasswordRules>
+            
+            <InputField
+              type="password"
+              name="password2"
+              placeholder="Confirm Password"
+              value={form.password2}
+              onChange={handleChange}
+              onFocus={handlePasswordFocus}
+              onBlur={handlePasswordBlur}
+              required
+              disabled={isLoading}
+              whileFocus={{ scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+            />
+            
+            <PasswordRule $valid={passwordValidation.matches} style={{ 
+              display: showPasswordRules ? 'flex' : 'none',
+              marginBottom: '15px'
+            }}>
+              <RuleIcon>{passwordValidation.matches ? '✓' : '•'}</RuleIcon>
+              Passwords match
+            </PasswordRule>
+
+            <SubmitButton
+              type="submit"
+              disabled={isLoading}
+              whileHover={{ scale: isLoading ? 1 : 1.02 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+            >
+              {isLoading ? 'Registering...' : 'Register'}
+            </SubmitButton>
+          </form>
+          
+          <LoginLink>
+            Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
+          </LoginLink>
+        </RegisterCard>
+      </RegisterContainer>
+    </>
+  );
+};
+
+export default Register;
+
+// --- STYLED COMPONENTS ---
 const RegisterContainer = styled.div`
   display: flex;
   justify-content: center;
@@ -112,230 +346,3 @@ const RuleIcon = styled.span`
   margin-right: 8px;
   font-size: 16px;
 `;
-
-const Register = () => {
-  const { loginUser } = useContext(AuthContext);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const from = location.state?.from || '/';
-
-  const [form, setForm] = useState({ 
-    username: '', 
-    email: '', 
-    password: '', 
-    password2: '' 
-  });
-  
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPasswordRules, setShowPasswordRules] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
-  const [passwordValidation, setPasswordValidation] = useState({
-    length: false,
-    notNumeric: false,
-    notSimilar: false,
-    matches: false
-  });
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handlePasswordFocus = () => {
-    setShowPasswordRules(true);
-    setPasswordFocused(true);
-  };
-
-  const handlePasswordBlur = () => {
-    setPasswordFocused(false);
-    if (form.password === '' && form.password2 === '') {
-      setShowPasswordRules(false);
-    }
-  };
-
-  useEffect(() => {
-    if (passwordFocused) {
-      setPasswordValidation({
-        length: form.password.length >= 8,
-        notNumeric: !/^\d+$/.test(form.password),
-        notSimilar: !form.password.toLowerCase().includes(form.username.toLowerCase()) && 
-                    !form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase()),
-        matches: form.password === form.password2 && form.password2 !== ''
-      });
-    }
-    // eslint-disable-next-line
-  }, [form.password, form.password2, passwordFocused]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    const passwordErrors = validatePassword();
-    if (passwordErrors.length > 0) {
-      passwordErrors.forEach(error => {
-        toast.error(error, {
-          duration: 5000,
-        });
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    if (form.password !== form.password2) {
-      toast.error("❌ Passwords don't match", {
-        duration: 5000,
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const res = await axios.post(`${API_URL}/api/register/`, form);
-      if (res.status === 201) {
-        toast.success('✅ Registration successful! Logging you in...', {
-          duration: 2000,
-        });
-        
-        // Use form.email and form.password to fix the ESLint error
-        const loginSuccess = await loginUser(form.email, form.password);
-        
-        // Wait for the toast, then redirect to their original destination
-        if (loginSuccess) {
-            setTimeout(() => navigate(from), 2000);
-        } else {
-            setTimeout(() => navigate('/login', { state: { from } }), 2000);
-        }
-      }
-    } catch (err) {
-      let errorMessage = 'Registration failed';
-      if (err.response) {
-        if (err.response.data.email) {
-          errorMessage = err.response.data.email[0];
-        } else if (err.response.data.username) {
-          errorMessage = err.response.data.username[0];
-        } else if (err.response.data.password) {
-          errorMessage = err.response.data.password[0];
-        }
-      }
-      toast.error(errorMessage, {
-        duration: 5000,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const validatePassword = () => {
-    const errors = [];
-    
-    if (form.password.length < 8) {
-      errors.push('Your password must contain at least 8 characters.');
-    }
-    if (/^\d+$/.test(form.password)) {
-      errors.push('Your password can\'t be entirely numeric.');
-    }
-    if (form.password.toLowerCase().includes(form.username.toLowerCase()) || 
-        form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase())) {
-      errors.push('Your password can\'t be too similar to your other personal information.');
-    }
-    
-    return errors;
-  };
-
-  return (
-    <RegisterContainer>
-      <RegisterCard
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <Title>Create Account</Title>
-        <form onSubmit={handleSubmit}>
-          <InputField
-            type="text"
-            name="username"
-            placeholder="Username"
-            value={form.username}
-            onChange={handleChange}
-            required
-            whileFocus={{ scale: 1.02 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-          />
-          <InputField
-            type="email"
-            name="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={handleChange}
-            required
-            whileFocus={{ scale: 1.02 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-          />
-          <InputField
-            type="password"
-            name="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={handleChange}
-            onFocus={handlePasswordFocus}
-            onBlur={handlePasswordBlur}
-            required
-            whileFocus={{ scale: 1.02 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-          />
-          
-          <PasswordRules $show={showPasswordRules}>
-            <PasswordRule $valid={passwordValidation.length}>
-              <RuleIcon>{passwordValidation.length ? '✓' : '•'}</RuleIcon>
-              At least 8 characters
-            </PasswordRule>
-            <PasswordRule $valid={passwordValidation.notNumeric}>
-              <RuleIcon>{passwordValidation.notNumeric ? '✓' : '•'}</RuleIcon>
-              Not entirely numeric
-            </PasswordRule>
-            <PasswordRule $valid={passwordValidation.notSimilar}>
-              <RuleIcon>{passwordValidation.notSimilar ? '✓' : '•'}</RuleIcon>
-              Not similar to personal info
-            </PasswordRule>
-          </PasswordRules>
-          
-          <InputField
-            type="password"
-            name="password2"
-            placeholder="Confirm Password"
-            value={form.password2}
-            onChange={handleChange}
-            onFocus={handlePasswordFocus}
-            onBlur={handlePasswordBlur}
-            required
-            whileFocus={{ scale: 1.02 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-          />
-          
-          <PasswordRule $valid={passwordValidation.matches} style={{ 
-            display: showPasswordRules ? 'flex' : 'none',
-            marginBottom: '15px'
-          }}>
-            <RuleIcon>{passwordValidation.matches ? '✓' : '•'}</RuleIcon>
-            Passwords match
-          </PasswordRule>
-
-          <SubmitButton
-            type="submit"
-            disabled={isLoading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {isLoading ? 'Registering...' : 'Register'}
-          </SubmitButton>
-        </form>
-        
-        <LoginLink>
-          Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
-        </LoginLink>
-      </RegisterCard>
-      
-    </RegisterContainer>
-  );
-};
-
-export default Register;

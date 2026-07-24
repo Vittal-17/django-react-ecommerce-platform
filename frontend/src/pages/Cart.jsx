@@ -5,6 +5,7 @@ import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
 // eslint-disable-next-line
 import { toast, Toaster } from "react-hot-toast";
+import { SkeletonRow } from '../components/SkeletonLoader';
 
 // ==========================================
 // CUSTOM CONFIRMATION MODAL
@@ -72,14 +73,14 @@ const Cart = () => {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [wishlistIds, setWishlistIds] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // 🚀 Handles skeleton state
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemToRemove, setItemToRemove] = useState(null);
 
   const fetchCartItems = async () => {
-    setLoading(true);
+    setIsLoading(true); // 🚀 Start skeleton
     if (user) {
       try {
         const res = await axiosInstance.get('/api/cart-items/');
@@ -89,7 +90,7 @@ const Cart = () => {
       const tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
       setCartItems(tempCart);
     }
-    setLoading(false);
+    setIsLoading(false); // 🚀 Stop skeleton
   };
 
   const fetchWishlist = async () => {
@@ -154,9 +155,6 @@ const Cart = () => {
     if (cartItems.length === 0) return;
     if (!user) {
       toast('🔒 Please log in to checkout your cart!', { style: { background: '#333', color: '#fff' }});
-      
-      // ADDED: { state: { from: '/checkout/' } }
-      // This tells the login page where to send them after success
       navigate('/login', { state: { from: '/checkout/' } }); 
     } else {
       navigate('/checkout/');
@@ -171,13 +169,14 @@ const Cart = () => {
 
   return (
     <CartContainer>
-      
       <h1>🛒 Your Cart</h1>
-
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={executeRemoveItem} />
 
-      {loading ? (
-        <SpinnerContainer><div className="spinner"></div></SpinnerContainer>
+      {/* 🚀 3-Way Render Logic: Loading, Empty, or Filled */}
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+          {[...Array(3)].map((_, index) => <SkeletonRow key={index} />)}
+        </div>
       ) : cartItems.length === 0 ? (
         <EmptyMessage>Your cart is empty 🛒</EmptyMessage>
       ) : (
@@ -204,23 +203,18 @@ const Cart = () => {
         </CartList>
       )}
       
-      {cartItems.length > 0 && (
+      {!isLoading && cartItems.length > 0 && (
         <CheckoutSection>
           <h3>Total: ${cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0).toFixed(2)}</h3>
           <CheckoutButton onClick={handleProceedToCheckout}>✅ Proceed to Checkout</CheckoutButton>
         </CheckoutSection>
       )}
-      
-      <style>{`
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #4caf50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: auto; }
-      `}</style>
     </CartContainer>
   );
 };
 
 // ==========================================
-// STYLED COMPONENTS (Retained Responsive Logic)
+// STYLED COMPONENTS 
 // ==========================================
 const Overlay = styled(motion.div)`
   position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
@@ -254,7 +248,6 @@ const CartContainer = styled.div`
     padding: 6rem 1rem 1rem 1rem; 
   } 
 `;
-const SpinnerContainer = styled.div` text-align: center; margin-top: 2rem; `;
 const EmptyMessage = styled.p` text-align: center; font-size: 1.2rem; color: #666; `;
 const CartList = styled.ul` list-style: none; padding: 0; display: flex; flex-direction: column; gap: 1.5rem; `;
 const CartItemCard = styled.li`

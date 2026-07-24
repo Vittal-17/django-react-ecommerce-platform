@@ -5,6 +5,7 @@ import AuthContext from '../context/AuthContext';
 import { FaSearch, FaShoppingCart, FaArrowRight, FaFilter, FaTimes } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
+import { SkeletonProductCard } from '../components/SkeletonLoader';
 
 const Products = () => {
   const { axiosInstance, user } = useContext(AuthContext);
@@ -12,6 +13,7 @@ const Products = () => {
   const [filtered, setFiltered] = useState([]);
   const [categories, setCategories] = useState([]);
   const [quantities, setQuantities] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,6 +45,7 @@ const Products = () => {
 
   useEffect(() => {
     const fetchCatalog = async () => {
+      setIsLoading(true);
       try {
         const res = await axiosInstance.get(`/api/products/?page=${currentPage}`);
         const items = res.data.results || res.data;
@@ -68,6 +71,8 @@ const Products = () => {
         setQuantities(initialQuantities);
       } catch (err) {
         console.error("Failed to load products", err);
+      } finally {
+        setIsLoading(false); // 🚀 ADD THIS: Stop the skeleton loader
       }
     };
 
@@ -186,9 +191,18 @@ const Products = () => {
         </AnimatePresence>
       </FilterSection>
 
-      {filtered.length === 0 ? (
-        <EmptyState>No products match your filters.</EmptyState>
+      {isLoading ? (
+        // 🚀 SHOW SKELETONS WHILE FETCHING
+        <ProductGrid>
+          {[...Array(8)].map((_, index) => (
+            <SkeletonProductCard key={index} />
+          ))}
+        </ProductGrid>
+      ) : filtered.length === 0 ? (
+        // SHOW EMPTY STATE IF NO MATCHES
+        <EmptyState></EmptyState>
       ) : (
+        // SHOW ACTUAL PRODUCTS
         <ProductGrid>
           {filtered.map((product, index) => {
             const qty = quantities[product.id] || 1;

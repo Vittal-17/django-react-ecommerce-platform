@@ -5,6 +5,7 @@ import AuthContext from '../context/AuthContext';
 import { FaCreditCard, FaPaypal, FaWallet, FaMapMarkerAlt, FaLock, FaCheckCircle, FaExclamationCircle, FaPhoneAlt } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { useNavigate, Link } from 'react-router-dom';
+import { SkeletonRow } from '../components/SkeletonLoader'; // 🚀 Added Skeleton
 
 const Checkout = () => {
   const { axiosInstance, user } = useContext(AuthContext);
@@ -13,12 +14,12 @@ const Checkout = () => {
   const [cartItems, setCartItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
-  const [contactPhone, setContactPhone] = useState(''); // NEW: Dedicated Contact Phone State
+  const [contactPhone, setContactPhone] = useState(''); 
   
   const [paymentMethod, setPaymentMethod] = useState('credit_card');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Used for payment submission
+  const [isFetching, setIsFetching] = useState(true); // 🚀 Used for initial render loading
 
-  // Phone Number Formatter
   const formatPhoneNumber = (value) => {
     const digits = value.replace(/\D/g, ''); 
     const match = digits.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
@@ -34,28 +35,27 @@ const Checkout = () => {
     }
 
     const fetchCheckoutData = async () => {
+      setIsFetching(true); // 🚀 Turn on skeleton
       try {
-        // 1. Fetch Cart
         const cartRes = await axiosInstance.get('/api/cart-items/');
         setCartItems(cartRes.data);
 
-        // 2. Fetch User Profile to get default phone number
         const profileRes = await axiosInstance.get(`/api/users/${user.id}/`);
         if (profileRes.data.phone) {
           setContactPhone(formatPhoneNumber(profileRes.data.phone));
         }
 
-        // 3. Fetch Addresses
         const addrRes = await axiosInstance.get('/api/addresses/');
         setAddresses(addrRes.data);
         
-        // Auto-select default address
         const defaultAddr = addrRes.data.find(a => a.is_default);
         if (defaultAddr) setSelectedAddressId(defaultAddr.id);
         else if (addrRes.data.length > 0) setSelectedAddressId(addrRes.data[0].id);
 
       } catch (err) {
         toast.error('❌ Failed to load checkout data');
+      } finally {
+        setIsFetching(false); // 🚀 Turn off skeleton
       }
     };
 
@@ -63,25 +63,18 @@ const Checkout = () => {
   }, [axiosInstance, user, navigate]);
 
   const handlePlaceOrder = async () => {
-    if (!selectedAddressId) {
-      return toast.error('⚠️ Please select a delivery address!');
-    }
-    if (!contactPhone.trim()) {
-      return toast.error('⚠️ A contact phone number is compulsory!');
-    }
-    if (cartItems.length === 0) {
-      return toast.error('⚠️ Your cart is empty!');
-    }
+    if (!selectedAddressId) return toast.error('⚠️ Please select a delivery address!');
+    if (!contactPhone.trim()) return toast.error('⚠️ A contact phone number is compulsory!');
+    if (cartItems.length === 0) return toast.error('⚠️ Your cart is empty!');
 
     setLoading(true);
     try {
       const selectedAddr = addresses.find(a => a.id === selectedAddressId);
       const addressSnapshot = `${selectedAddr.label}: ${selectedAddr.full_address}`;
 
-      // 1. Create Order (Passing the address AND phone snapshots directly to the Order table)
       const orderRes = await axiosInstance.post('/api/orders/', {
         shipping_address: addressSnapshot,
-        contact_phone: contactPhone, // Matches our new serializers.py requirement
+        contact_phone: contactPhone,
         total_price: cartTotal.toFixed(2),
         order_items: cartItems.map(item => ({
           product: item.product?.id || item.product,
@@ -92,7 +85,6 @@ const Checkout = () => {
   
       const order = orderRes.data;
   
-      // 2. Simulate Payment
       setTimeout(async () => {
         try {
           const paymentRes = await axiosInstance.post('/api/payments/', {
@@ -124,7 +116,7 @@ const Checkout = () => {
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0);
 
-  if (cartItems.length === 0 && !loading) {
+  if (cartItems.length === 0 && !isFetching) {
     return (
       <CheckoutContainer>
         <div style={{ textAlign: 'center', padding: '4rem' }}>
@@ -137,100 +129,107 @@ const Checkout = () => {
 
   return (
     <CheckoutContainer>
-      
       <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         Secure Checkout
       </motion.h1>
 
-      <CartSection>
-        <h2>Your Cart</h2>
-        <CartItems>
-          {cartItems.map(item => (
-            <CartItem key={item.id}>
-              <ProductImage>
-                {item.product_image ? <img src={item.product_image} alt={item.product_name} /> : <div className="placeholder" />}
-              </ProductImage>
-              <div>
-                <ProductName>{item.product_name}</ProductName>
-                <ProductQty>{item.quantity} × ${item.price}</ProductQty>
-              </div>
-            </CartItem>
-          ))}
-        </CartItems>
-      </CartSection>
-
-      <AddressSection>
-        <h2><FaMapMarkerAlt /> Delivery Address</h2>
-        
-        {addresses.length === 0 ? (
-          <WarningBox>
-            <FaExclamationCircle size={24} />
-            <div>
-              <strong>No addresses found</strong>
-              <p>Please go to your <Link to="/dashboard">Dashboard</Link> to add a delivery address before checking out.</p>
-            </div>
-          </WarningBox>
-        ) : (
-          <AddressList>
-            {addresses.map(addr => (
-              <AddressOption 
-                key={addr.id} 
-                $selected={selectedAddressId === addr.id}
-                onClick={() => setSelectedAddressId(addr.id)}
-              >
-                <div className="radio">
-                  {selectedAddressId === addr.id && <FaCheckCircle color="#4caf50" />}
-                </div>
-                <div>
-                  <strong>{addr.label} {addr.is_default && <span className="badge">Default</span>}</strong>
-                  <p>{addr.full_address}</p>
-                </div>
-              </AddressOption>
-            ))}
-          </AddressList>
-        )}
-
-        {/* NEW: Explicit Delivery Phone Input */}
-        <div style={{ marginTop: '2rem', borderTop: '1px solid #eee', paddingTop: '1.5rem' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#111' }}>
-            <FaPhoneAlt /> Delivery Contact Number
-          </h2>
-          <InputField 
-            type="tel" 
-            placeholder="(XXX) XXX-XXXX"
-            value={contactPhone}
-            onChange={(e) => setContactPhone(formatPhoneNumber(e.target.value))}
-            maxLength="14"
-            style={{ width: '100%', maxWidth: '350px' }}
-          />
+      {/* 🚀 Render Skeletons while pre-fetching data */}
+      {isFetching ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '2rem' }}>
+          {[...Array(3)].map((_, i) => <SkeletonRow key={i} />)}
         </div>
-      </AddressSection>
+      ) : (
+        <>
+          <CartSection>
+            <h2>Your Cart</h2>
+            <CartItems>
+              {cartItems.map(item => (
+                <CartItem key={item.id}>
+                  <ProductImage>
+                    {item.product_image ? <img src={item.product_image} alt={item.product_name} /> : <div className="placeholder" />}
+                  </ProductImage>
+                  <div>
+                    <ProductName>{item.product_name}</ProductName>
+                    <ProductQty>{item.quantity} × ${item.price}</ProductQty>
+                  </div>
+                </CartItem>
+              ))}
+            </CartItems>
+          </CartSection>
 
-      <PaymentSection>
-        <h2>Payment Method</h2>
-        <PaymentOptions>
-          <PaymentOption $active={paymentMethod === 'credit_card'} onClick={() => setPaymentMethod('credit_card')} whileHover={{ scale: 1.02 }}>
-            <FaCreditCard /> <span>Credit Card</span>
-          </PaymentOption>
-          <PaymentOption $active={paymentMethod === 'paypal'} onClick={() => setPaymentMethod('paypal')} whileHover={{ scale: 1.02 }}>
-            <FaPaypal /> <span>PayPal</span>
-          </PaymentOption>
-          <PaymentOption $active={paymentMethod === 'wallet'} onClick={() => setPaymentMethod('wallet')} whileHover={{ scale: 1.02 }}>
-            <FaWallet /> <span>Wallet</span>
-          </PaymentOption>
-        </PaymentOptions>
-      </PaymentSection>
+          <AddressSection>
+            <h2><FaMapMarkerAlt /> Delivery Address</h2>
+            
+            {addresses.length === 0 ? (
+              <WarningBox>
+                <FaExclamationCircle size={24} />
+                <div>
+                  <strong>No addresses found</strong>
+                  <p>Please go to your <Link to="/dashboard">Dashboard</Link> to add a delivery address before checking out.</p>
+                </div>
+              </WarningBox>
+            ) : (
+              <AddressList>
+                {addresses.map(addr => (
+                  <AddressOption 
+                    key={addr.id} 
+                    $selected={selectedAddressId === addr.id}
+                    onClick={() => setSelectedAddressId(addr.id)}
+                  >
+                    <div className="radio">
+                      {selectedAddressId === addr.id && <FaCheckCircle color="#4caf50" />}
+                    </div>
+                    <div>
+                      <strong>{addr.label} {addr.is_default && <span className="badge">Default</span>}</strong>
+                      <p>{addr.full_address}</p>
+                    </div>
+                  </AddressOption>
+                ))}
+              </AddressList>
+            )}
 
-      <TotalSection>
-        <h2>Order Total:&nbsp;</h2>
-        <TotalAmount>${cartTotal.toFixed(2)}</TotalAmount>
-      </TotalSection>
+            <div style={{ marginTop: '2rem', borderTop: '1px solid #eee', paddingTop: '1.5rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#111' }}>
+                <FaPhoneAlt /> Delivery Contact Number
+              </h2>
+              <InputField 
+                type="tel" 
+                placeholder="(XXX) XXX-XXXX"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(formatPhoneNumber(e.target.value))}
+                maxLength="14"
+                style={{ width: '100%', maxWidth: '350px' }}
+              />
+            </div>
+          </AddressSection>
 
-      <PlaceOrderButton onClick={handlePlaceOrder} disabled={loading || cartItems.length === 0 || addresses.length === 0} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-        {loading ? 'Processing...' : 'Place Order Now'}
-      </PlaceOrderButton>
+          <PaymentSection>
+            <h2>Payment Method</h2>
+            <PaymentOptions>
+              <PaymentOption $active={paymentMethod === 'credit_card'} onClick={() => setPaymentMethod('credit_card')} whileHover={{ scale: 1.02 }}>
+                <FaCreditCard /> <span>Credit Card</span>
+              </PaymentOption>
+              <PaymentOption $active={paymentMethod === 'paypal'} onClick={() => setPaymentMethod('paypal')} whileHover={{ scale: 1.02 }}>
+                <FaPaypal /> <span>PayPal</span>
+              </PaymentOption>
+              <PaymentOption $active={paymentMethod === 'wallet'} onClick={() => setPaymentMethod('wallet')} whileHover={{ scale: 1.02 }}>
+                <FaWallet /> <span>Wallet</span>
+              </PaymentOption>
+            </PaymentOptions>
+          </PaymentSection>
 
-      {/* --- Payment Processing Overlay --- */}
+          <TotalSection>
+            <h2>Order Total:&nbsp;</h2>
+            <TotalAmount>${cartTotal.toFixed(2)}</TotalAmount>
+          </TotalSection>
+
+          <PlaceOrderButton onClick={handlePlaceOrder} disabled={loading || cartItems.length === 0 || addresses.length === 0} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            {loading ? 'Processing...' : 'Place Order Now'}
+          </PlaceOrderButton>
+        </>
+      )}
+
+      {/* --- Payment Processing Overlay (Retained) --- */}
       <AnimatePresence>
         {loading && (
           <Overlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

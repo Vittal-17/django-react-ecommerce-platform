@@ -2,13 +2,17 @@ import random
 import time
 import threading
 from django.db import transaction, IntegrityError
+from django.db.models import Q
 from django.core.cache import cache
+from datetime import date
 from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+from django.conf import settings
 
 from rest_framework import viewsets, generics, status, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import ValidationError
 
 # 🚨 THE UPGRADE: Enterprise Filtering & Search
@@ -17,6 +21,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import permissions
+from .permissions import IsSellerAdminOrReadOnly, IsSellerOrAdmin, IsAdminUser
 
 from .models import (
     User, Category, Product, Order, OrderItem, Review, 
@@ -29,8 +35,7 @@ from .serializers import (
     CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
-from .email_service import send_otp_email
-from .email_service import send_order_email
+from .email_service import send_order_email,send_otp_email,send_vendor_new_order_email,send_vendor_product_status_email, async_notify_cancellation
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 12 
@@ -62,14 +67,51 @@ class UserViewSet(viewsets.ModelViewSet):
             return ChangePasswordSerializer
         return UserSerializer
 
-    @action(detail=False, methods=['post'], url_path='request-otp', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='request-otp')
     def request_otp(self, request):
+        """Generates an OTP for profile updates with enterprise rate-limiting"""
         user = request.user
-        otp_code = str(random.randint(100000, 999999))
-        cache.set(f"profile_otp_{user.id}", otp_code, timeout=300)
+        today = date.today().isoformat()
         
-        send_otp_email(user.email, user.username, otp_code)
-        return Response({"message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
+        count_key = f"otp_count_{user.id}_{today}"
+        cooldown_key = f"otp_cooldown_{user.id}"
+
+        # 🚨 1. Check the 60-Second Cooldown
+        if cache.get(cooldown_key):
+            return Response(
+                {"error": "Please wait 60 seconds before requesting another OTP."}, 
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        # 🚨 2. Check the Daily Limit (10 per day)
+        otp_count = cache.get(count_key, 0)
+        if otp_count >= 10:
+            return Response(
+                {"error": "Daily OTP limit reached (10/day). Please try again tomorrow."}, 
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        # 3. Generate the 6-digit OTP
+        otp = str(random.randint(100000, 999999))
+        
+        # 4. Save to Cache
+        cache.set(f"profile_otp_{user.id}", otp, timeout=300) # OTP valid for 5 mins
+        cache.set(count_key, otp_count + 1, timeout=86400)    # Increment daily count (expires in 24h)
+        cache.set(cooldown_key, True, timeout=60)             # Lock the endpoint for 60 seconds
+
+        # 5. Send the Email (Using your existing email logic)
+        subject = "Your EazyShop Security Code"
+        body = f"Hello {user.username},\n\nYour security code is: {otp}\n\nThis code expires in 5 minutes.\n\nNever share this code with anyone."
+        
+        try:
+            send_otp_email(to_email=user.email, username=user.username, otp=otp)
+            return Response({"message": f"OTP sent to {user.email}"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            # If email fails, immediately remove the cooldown so they can try again
+            print(f"\n[OTP EMAIL ERROR] ❌ {str(e)}\n")
+
+            cache.delete(cooldown_key)
+            return Response({"error": "Failed to send email. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -103,6 +145,20 @@ class UserViewSet(viewsets.ModelViewSet):
             return super().update(request, *args, **kwargs)
         except Exception:
             return Response({"error": "Profile update failed."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='verify-password')
+    def verify_password(self, request):
+        """Real-time backend validation for the current password"""
+        user = request.user
+        current_password = request.data.get('current_password')
+
+        if not current_password:
+            return Response({"error": "Current password is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.check_password(current_password):
+            return Response({"message": "Password verified successfully."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Incorrect current password."}, status=status.HTTP_400_BAD_REQUEST)
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
@@ -174,21 +230,38 @@ class CategoryViewSet(viewsets.ModelViewSet):
         log_admin_action(self.request.user, f"Deleted category: '{name}'")
 
 class ProductViewSet(viewsets.ModelViewSet):
-    # 🚨 N+1 FIX: select_related fetches the category efficiently
-    queryset = Product.objects.select_related('category').all()
+    queryset = Product.objects.all() # 🚀 THE FIX: Keeps the URL Router happy
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    
+    permission_classes = [IsSellerAdminOrReadOnly] 
     pagination_class = StandardResultsSetPagination 
     
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['category'] # Allows: /api/products/?category=2
-    search_fields = ['name', 'description'] # Allows: /api/products/?search=laptop
-    ordering_fields = ['price', 'created_at'] # Allows: /api/products/?ordering=-price
+    filterset_fields = ['category'] 
+    search_fields = ['name', 'description'] 
+    ordering_fields = ['price', 'created_at'] 
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Product.objects.select_related('category', 'vendor')
+        
+        # 1. ADMIN PANEL: Admins see absolutely everything
+        if user.is_authenticated and getattr(user, 'role', '') == 'admin':
+            return queryset.all()
+            
+        # 2. VENDOR DASHBOARD: Sellers explicitly fetching their own catalog
+        vendor_param = self.request.query_params.get('vendor')
+        if user.is_authenticated and getattr(user, 'role', '') == 'seller' and vendor_param == str(user.id):
+            return queryset.filter(vendor=user)
+            
+        # 3. PUBLIC STOREFRONT: Everyone else (Guests, Users, and Sellers browsing the store)
+        # ONLY return active, fully approved products!
+        return queryset.filter(approval_status='approved', is_active=True)
 
     def perform_create(self, serializer):
-        instance = serializer.save()
-        log_admin_action(self.request.user, f"Created Product: '{instance.name}' at ${instance.price}")
+        user = self.request.user
+        auto_status = 'approved' if getattr(user, 'role', '') == 'admin' else 'pending'
+        instance = serializer.save(vendor=user, approval_status=auto_status)
+        log_admin_action(self.request.user, f"Created Product: '{instance.name}' at ${instance.price} (Status: {auto_status})")
 
     def perform_update(self, serializer):
         instance = self.get_object()
@@ -205,8 +278,17 @@ class ProductViewSet(viewsets.ModelViewSet):
             
     def perform_destroy(self, instance):
         name = instance.name
-        instance.delete()
-        log_admin_action(self.request.user, f"Deleted Product: '{name}'")
+        instance.is_active = False
+        instance.save()
+        log_admin_action(self.request.user, f"Soft-Deleted Product: '{name}'")
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def approve(self, request, pk=None):
+        product = self.get_object()
+        product.approval_status = 'approved'
+        product.save()
+        log_admin_action(request.user, f"Approved product ID {product.id}")
+        return Response({"message": f"{product.name} is now live!"}, status=status.HTTP_200_OK)
 
 
 # ==========================================
@@ -215,15 +297,12 @@ class ProductViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
-    
     pagination_class = StandardResultsSetPagination
-    
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['status']
     ordering_fields = ['created_at', 'total_price']
 
     def get_queryset(self):
-        # 🚨 N+1 FIX: Efficiently grabs the Order, User, and the nested product details
         queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
         if getattr(self.request.user, 'role', None) == 'admin':
             return queryset.all()
@@ -232,6 +311,8 @@ class OrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         order = serializer.save(user=self.request.user)
         self.send_order_status_email(order)
+        # 🚀 Trigger emails to the vendors who own the products
+        self.notify_vendors_async(order)
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
     def perform_update(self, serializer):
@@ -278,6 +359,29 @@ class OrderViewSet(viewsets.ModelViewSet):
         except Exception as e:
             print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
 
+
+    def notify_vendors_async(self, order):
+        """Spins up a thread to email vendors about their sales using premium HTML templates"""
+        def send_emails():
+            for item in order.order_items.all():
+                if item.vendor:
+                    try:
+                        # 🚀 Trigger the new premium HTML vendor email!
+                        send_vendor_new_order_email(
+                            to_email=item.vendor.email,
+                            username=item.vendor.username,
+                            order_id=order.id,
+                            product_name=item.product.name,
+                            quantity=item.quantity,
+                            earnings=item.seller_earnings,
+                            customer_name=order.user.username,
+                            address=order.shipping_address or 'Saved Address'
+                        )
+                    except Exception as e:
+                        print(f"Failed to notify vendor {item.vendor.email}: {e}")
+        
+        threading.Thread(target=send_emails).start()
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         order = self.get_object()
@@ -287,19 +391,42 @@ class OrderViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             order.status = 'cancelled'
             order.save()
+            
+            # 🚀 1. Restore stock AND update individual vendor order item statuses to cancelled
             for item in order.order_items.all():
-                product = Product.objects.select_for_update().get(id=item.product.id)
-                product.stock += item.quantity
-                product.save()
+                item.status = 'cancelled'
+                item.save()
                 
-        # Log it if an admin did it
+                if item.product:
+                    product = Product.objects.select_for_update().get(id=item.product.id)
+                    product.stock += item.quantity
+                    product.save()
+                
         if getattr(request.user, 'role', '') == 'admin':
             log_admin_action(request.user, f"Cancelled Order #{order.id}")
             
-        # 🔥 THE FIX: Always send the email, regardless of who cancelled it
+        # 2. Email the customer about the cancellation
         self.send_order_status_email(order)
-            
-        return Response({"message": "Order cancelled."}, status=status.HTTP_200_OK)
+
+        async_notify_cancellation(order)
+        # 🚀 3. Alert the affected vendors in the background
+        #self.notify_vendors_of_cancellation_async(order)
+        
+        return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
+
+    def notify_vendors_of_cancellation_async(self, order):
+        """Spins up a thread to notify vendors that an order was cancelled"""
+        def send_cancellation_emails():
+            for item in order.order_items.all():
+                if item.vendor:
+                    subject = f"Notice: Order #{order.id} has been Cancelled"
+                    body = f"Hello {item.vendor.username},\n\nOrder #{order.id} containing your product '{item.product.name}' has been cancelled by the customer. Please do not fulfill this item.\n\nEazyShop Team"
+                    try:
+                        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [item.vendor.email])
+                    except Exception as e:
+                        print(f"Failed to notify vendor {item.vendor.email} of cancellation: {e}")
+        
+        threading.Thread(target=send_cancellation_emails).start()
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):
@@ -424,3 +551,82 @@ class AdminLogViewSet(viewsets.ModelViewSet):
     serializer_class = AdminLogSerializer
     permission_classes = [IsAdminUser]
     pagination_class = StandardResultsSetPagination
+
+import threading
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+
+class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = OrderItem.objects.all()
+    serializer_class = OrderItemSerializer 
+    permission_classes = [IsSellerOrAdmin]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'role', '') != 'seller':
+            return OrderItem.objects.none()
+        return OrderItem.objects.filter(vendor=user).select_related('order', 'product').order_by('-id')
+
+    @action(detail=True, methods=['patch'])
+    def update_status(self, request, pk=None):
+        item = self.get_object()
+        new_status = request.data.get('status')
+        
+        if new_status not in ['shipped', 'delivered', 'cancelled']:
+            return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # 1. Update the individual item status
+        item.status = new_status
+        item.save()
+
+        # 🚀 2. Automatically Sync the Parent Order Status!
+        order = item.order
+        all_items = order.order_items.all()
+        
+        # If all items in this order are now delivered, mark the order delivered
+        if all(i.status == 'delivered' for i in all_items):
+            order.status = 'delivered'
+        # If any item is shipped (and none pending/cancelled improperly), mark order shipped
+        elif any(i.status == 'shipped' for i in all_items):
+            order.status = 'shipped'
+        elif all(i.status == 'cancelled' for i in all_items):
+            order.status = 'cancelled'
+        order.save()
+        
+        # 3. Trigger the customer email silently in the background
+        self.notify_customer_async(item)
+        
+        return Response({"message": f"Item marked as {new_status}"}, status=status.HTTP_200_OK)
+
+    def notify_customer_async(self, item):
+        """Spins up a thread to alert the customer that their specific item shipped/delivered"""
+        def send_email():
+            try:
+                order = item.order
+                # Look up the payment so the receipt looks official
+                payment = Payment.objects.filter(order=order).first()
+                
+                if payment:
+                    payment_method_display = payment.get_payment_method_display()
+                    transaction_id_display = payment.transaction_id or "Verified Transaction"
+                else:
+                    payment_method_display = "Completed"
+                    transaction_id_display = "System Confirmed"
+                
+                # 🚀 Fire the HTML email to the customer!
+                send_order_email(
+                    to_email=order.user.email,
+                    username=order.user.username,
+                    order_id=order.id,
+                    status=item.status,  # Passes 'shipped', 'delivered', or 'cancelled'
+                    total=order.total_price,
+                    payment_method=payment_method_display,
+                    txn_id=transaction_id_display,
+                    address=order.shipping_address or 'Saved Address'
+                )
+            except Exception as e:
+                print(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {str(e)}")
+                
+        threading.Thread(target=send_email).start()

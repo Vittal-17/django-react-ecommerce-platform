@@ -2,18 +2,20 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.core.cache import cache
 from .models import User, Product, Order, OrderItem, Review, Category, Address, AdminLog, CartItem, Cart, Wishlist, Coupon
+from decimal import Decimal
 
 class EazyShopTitaniumTestSuite(APITestCase):
     def setUp(self):
-        # 1. Setup Identities (🔥 THE FIX: added is_staff=True to Admin)
+        # 1. Setup Identities
         self.customer = User.objects.create_user(username="customer", email="cust@test.com", password="password123", role="user")
         self.hacker = User.objects.create_user(username="hacker", email="hack@test.com", password="password123", role="user")
         self.admin = User.objects.create_user(username="admin", email="admin@test.com", password="password123", role="admin", is_staff=True)
+        self.seller = User.objects.create_user(username="seller", email="seller@test.com", password="password123", role="seller")
         
-        # 2. Setup Catalog
+        # 2. Setup Catalog (Explicitly mark as approved so public filters & carts accept them during standard tests)
         self.category = Category.objects.create(name="Electronics")
-        self.product = Product.objects.create(name="Gaming Laptop", price=1000.00, stock=5, category=self.category)
-        self.product_two = Product.objects.create(name="Mouse", price=50.00, stock=20, category=self.category)
+        self.product = Product.objects.create(name="Gaming Laptop", price=Decimal('1000.00'), stock=5, category=self.category, approval_status='approved', is_active=True, vendor=self.seller)
+        self.product_two = Product.objects.create(name="Mouse", price=Decimal('50.00'), stock=20, category=self.category, approval_status='approved', is_active=True, vendor=self.seller)
         
         # 3. Setup Cart
         self.cart = Cart.objects.create(user=self.customer)
@@ -23,9 +25,9 @@ class EazyShopTitaniumTestSuite(APITestCase):
         self.cart_url = '/api/cart-items/'
         self.user_detail_url = f'/api/users/{self.customer.id}/'
 
-    # ==========================================
-    # PHASE 1: AUTHENTICATION & IDENTITY
-    # ==========================================
+#     # ==========================================
+#     # PHASE 1: AUTHENTICATION & IDENTITY
+#     # ==========================================
     def test_01_registration_success(self):
         """Standard registration succeeds with matching passwords"""
         response = self.client.post('/api/register/', {
@@ -348,3 +350,128 @@ class EazyShopTitaniumTestSuite(APITestCase):
         self.client.force_authenticate(user=self.customer)
         response = self.client.post('/api/coupons/', {"code": "HACK100", "discount_percent": 100, "expires_at": "2030-01-01"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ==========================================
+    # PHASE 11: MULTI-VENDOR & MARKETPLACE ARCHITECTURE
+    # ==========================================
+    def test_43_seller_product_creation_defaults_to_pending(self):
+        """When a seller creates a product, it must default to 'pending' and map to their ID"""
+        self.client.force_authenticate(user=self.seller)
+        response = self.client.post('/api/products/', {
+            "name": "Vendor Item", 
+            "description": "High quality vendor item description",  # 🚀 Added description here
+            "price": 100.00, 
+            "stock": 10, 
+            "category": self.category.id, 
+            "image_url": "http://img.com"
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['approval_status'], 'pending')
+        self.assertEqual(response.data['vendor'], self.seller.id)
+
+    def test_44_public_catalog_hides_pending_products(self):
+        """Unapproved products are strictly hidden from standard catalog queries"""
+        Product.objects.create(name="Approved Item", price=10, stock=5, vendor=self.seller, approval_status='approved', is_active=True)
+        Product.objects.create(name="Pending Secret", price=10, stock=5, vendor=self.seller, approval_status='pending', is_active=True)
+        
+        # Public fetch
+        response = self.client.get('/api/products/')
+        names = [p['name'] for p in response.data['results']]
+        
+        self.assertIn("Approved Item", names)
+        self.assertNotIn("Pending Secret", names)
+
+    def test_45_admin_can_approve_product(self):
+        """Admins can hit the secure approve endpoint to make a product live"""
+        pending_prod = Product.objects.create(name="Pending Item", price=10, stock=5, vendor=self.seller, approval_status='pending')
+        
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(f'/api/products/{pending_prod.id}/approve/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        pending_prod.refresh_from_db()
+        self.assertEqual(pending_prod.approval_status, 'approved')
+
+    def test_46_cannot_add_pending_product_to_cart(self):
+        """Security: Cart serializer physically blocks unapproved products from being added"""
+        pending_prod = Product.objects.create(name="Pending Item", price=10, stock=5, vendor=self.seller, approval_status='pending')
+        
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post(self.cart_url, {"product": pending_prod.id, "quantity": 1}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("pending approval", str(response.data))
+
+    def test_47_automated_revenue_splitting(self):
+        """OrderItem automatically calculates the 10% platform fee and 90% seller earnings"""
+        approved_prod = Product.objects.create(name="Seller Item", price=100.00, stock=5, vendor=self.seller, approval_status='approved', is_active=True)
+        
+        # Customer buys 2 units ($200 total)
+        self.client.force_authenticate(user=self.customer)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": approved_prod.id, "quantity": 2}]}
+        self.client.post(self.order_url, payload, format='json')
+        
+        # Verify the financial math in the database
+        order_item = OrderItem.objects.get(product=approved_prod)
+        self.assertEqual(float(order_item.platform_fee), 20.00)     # 10% of 200
+        self.assertEqual(float(order_item.seller_earnings), 180.00) # 90% of 200
+        self.assertEqual(order_item.vendor, self.seller)            # Funds mapped to correct seller
+
+
+    # ==========================================
+    # PHASE 12: VENDOR FULFILLMENT & PARENT-CHILD SYNC (v1.6.0)
+    # ==========================================
+    def test_48_vendor_updates_item_status_syncs_parent_order(self):
+        """Vendor updating an order item status automatically syncs the parent order status"""
+        approved_prod = Product.objects.create(name="Vendor Fulfillment Item", price=50.00, stock=5, vendor=self.seller, approval_status='approved', is_active=True)
+        
+        # 1. Customer places order
+        self.client.force_authenticate(user=self.customer)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": approved_prod.id, "quantity": 1}]}
+        res = self.client.post(self.order_url, payload, format='json')
+        order_id = res.data['id']
+        
+        # 2. Seller updates order item to 'shipped'
+        self.client.force_authenticate(user=self.seller)
+        order_item = OrderItem.objects.get(order_id=order_id, product=approved_prod)
+        response = self.client.patch(f'/api/vendor-sales/{order_item.id}/update_status/', {"status": "shipped"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # 3. Verify parent order status synced to 'shipped'
+        order = Order.objects.get(id=order_id)
+        self.assertEqual(order.status, 'shipped')
+
+        # 4. Seller updates order item to 'delivered'
+        response = self.client.patch(f'/api/vendor-sales/{order_item.id}/update_status/', {"status": "delivered"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # 5. Verify parent order status synced to 'delivered'
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'delivered')
+
+    def test_49_unauthorized_seller_cannot_update_sales_status(self):
+        """Security IDOR: A seller cannot update fulfillment status for items belonging to another seller"""
+        other_seller = User.objects.create_user(username="rivalseller", email="rival@test.com", password="password123", role="seller")
+        approved_prod = Product.objects.create(name="Rival Item", price=50.00, stock=5, vendor=self.seller, approval_status='approved', is_active=True)
+        
+        self.client.force_authenticate(user=self.customer)
+        payload = {"shipping_address": "123", "contact_phone": "123", "order_items": [{"product": approved_prod.id, "quantity": 1}]}
+        res = self.client.post(self.order_url, payload, format='json')
+        order_item = OrderItem.objects.get(order_id=res.data['id'])
+        
+        # Authenticate as the wrong seller
+        self.client.force_authenticate(user=other_seller)
+        response = self.client.patch(f'/api/vendor-sales/{order_item.id}/update_status/', {"status": "shipped"}, format='json')
+        self.assertIn(response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND])
+
+    def test_50_order_cancellation_syncs_order_items(self):
+        """When a customer cancels an order, all associated order items are also marked as cancelled"""
+        self.client.force_authenticate(user=self.customer)
+        order = Order.objects.create(user=self.customer, status='pending', total_price=50.00)
+        item = OrderItem.objects.create(order=order, product=self.product, quantity=1, price=50.00, vendor=self.seller)
+        
+        response = self.client.post(f'/api/orders/{order.id}/cancel/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        item.refresh_from_db()
+        self.assertEqual(item.status, 'cancelled')

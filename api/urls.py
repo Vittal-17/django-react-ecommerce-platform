@@ -4,12 +4,13 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     UserViewSet, CategoryViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet,
     ReviewViewSet, WishlistViewSet, CouponViewSet, PaymentViewSet, AdminLogViewSet,
-    CartViewSet, CartItemViewSet, RegisterView, CustomTokenObtainPairView,AddressViewSet
+    CartViewSet, CartItemViewSet, RegisterView, CustomTokenObtainPairView,AddressViewSet,VendorSalesViewSet
 )
 
 # Public API router
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='users')
+router.register(r'vendor-sales', VendorSalesViewSet, basename='vendor-sales')
 router.register(r'addresses', AddressViewSet, basename='address')
 router.register(r'categories', CategoryViewSet)
 router.register(r'products', ProductViewSet)

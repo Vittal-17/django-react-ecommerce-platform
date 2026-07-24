@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { toast } from "react-hot-toast";
-import { FaStar, FaShoppingCart, FaArrowRight, FaCheckCircle, FaBoxOpen } from 'react-icons/fa';
+import { toast } from "react-hot-toast"; // eslint-disable-next-line
+import { FaStar, FaShoppingCart, FaArrowRight, FaCheckCircle, FaBoxOpen, FaStore } from 'react-icons/fa';
+import { SkeletonRow } from '../components/SkeletonLoader'; // 🚀 Added import
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -13,6 +14,10 @@ const ProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
   
+  // 🚀 Dual Loading States
+  const [isLoading, setIsLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  
   // Review Pagination State
   const [reviewPage, setReviewPage] = useState(1);
   const [totalReviewPages, setTotalReviewPages] = useState(1);
@@ -20,19 +25,23 @@ const ProductDetail = () => {
   const [purchaseDate, setPurchaseDate] = useState(null);
 
   useEffect(() => {
+    setIsLoading(true);
     axiosInstance.get(`/api/products/${id}/`)
       .then(res => setProduct(res.data))
-      .catch(err => toast.error('❌ Failed to load product.', { duration: 2000 }));
+      .catch(err => toast.error('❌ Failed to load product.', { duration: 2000 }))
+      .finally(() => setIsLoading(false)); // 🚀 Stop product skeleton
   }, [id, axiosInstance]);
 
   // Fetch Paginated Reviews (Read Only)
   const fetchReviews = () => {
+    setReviewsLoading(true);
     axiosInstance.get(`/api/reviews/?product=${id}&page=${reviewPage}`)
       .then(res => {
         setReviews(res.data.results || res.data);
         if (res.data.count) setTotalReviewPages(Math.ceil(res.data.count / 12));
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error(err))
+      .finally(() => setReviewsLoading(false)); // 🚀 Stop reviews skeleton
   };
 
   useEffect(() => {
@@ -92,6 +101,18 @@ const ProductDetail = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <DetailContainer>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '2rem' }}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      </DetailContainer>
+    );
+  }
+
   if (!product) return null;
 
   return (
@@ -106,15 +127,17 @@ const ProductDetail = () => {
       </AnimatePresence>
 
       <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>{product.name}</motion.h1>
-      
-      
 
       <ProductWrapper>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', margin: '0.5rem 0' }}>
+          <FaStore color="#2e7d32" /> Sold by: <strong style={{ color: '#0f172a' }}>{product.vendor_name || 'EazyShop Official'}</strong>
+        </div>
         <motion.img src={product.image_url} alt={product.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}>{product.description}</motion.p>
       </ProductWrapper>
-        {/* PRICE DISPLAYED HERE */}
+      
       <PriceDisplay>${Number(product.price).toFixed(2)}</PriceDisplay>
+      
       <ActionArea>
         <QuantityControl>
           <button onClick={() => setQuantity(prev => Math.max(1, prev - 1))} disabled={quantity <= 1}>-</button>
@@ -126,7 +149,13 @@ const ProductDetail = () => {
 
       <div style={{ marginTop: '3rem' }}>
         <h2 style={{ color: '#2e7d32', textAlign: 'center' }}>Customer Reviews</h2>
-        {reviews.length === 0 ? (
+        
+        {/* 🚀 Render Review Skeletons independently */}
+        {reviewsLoading ? (
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+             {[...Array(2)].map((_, index) => <SkeletonRow key={index} />)}
+           </div>
+        ) : reviews.length === 0 ? (
           <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center' }}>No reviews yet.</p>
         ) : (
           reviews.map(review => (
@@ -138,7 +167,7 @@ const ProductDetail = () => {
           ))
         )}
 
-        {totalReviewPages > 1 && (
+        {!reviewsLoading && totalReviewPages > 1 && (
           <PaginationWrapper>
             <PageButton onClick={() => setReviewPage(p => Math.max(p - 1, 1))} disabled={reviewPage === 1}>&larr; Previous</PageButton>
             <PageInfo>Page {reviewPage} of {totalReviewPages}</PageInfo>

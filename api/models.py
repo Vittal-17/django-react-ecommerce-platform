@@ -9,7 +9,11 @@ from decimal import Decimal
 # ==========================================
 class User(AbstractUser):
     email = models.EmailField(unique=True) 
-    ROLE_CHOICES = (('user', 'User'), ('admin', 'Admin'))
+    ROLE_CHOICES = (
+        ('user', 'Customer'),
+        ('seller', 'Vendor / Seller'),
+        ('admin', 'Administrator'),
+    )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     phone = models.CharField(max_length=20, blank=True, null=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -56,6 +60,11 @@ class Category(models.Model):
         return self.name
 
 class Product(models.Model):
+    APPROVAL_CHOICES = (
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved & Live'),
+        ('rejected', 'Rejected'),
+    )
     name = models.CharField(max_length=255)
     description = models.TextField()
     price = models.DecimalField(
@@ -66,6 +75,11 @@ class Product(models.Model):
     stock = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     image_url = models.URLField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    vendor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='listed_products', null=True)
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_CHOICES, default='pending')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -135,13 +149,43 @@ class Order(models.Model):
         return f"Order #{self.id} by {self.user.username}"
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_items')
-    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, related_name='order_history')
+
+    ITEM_STATUS_CHOICES = (
+        ('pending', 'Pending Fulfillment'),
+        ('shipped', 'Shipped by Vendor'),
+        ('delivered', 'Delivered'),
+        ('cancelled', 'Cancelled'),
+    )
+
+    order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='order_items')
+    product = models.ForeignKey('Product', on_delete=models.SET_NULL, null=True, related_name='order_history')
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # Vendor Fulfillment & Finance Architecture
+    vendor = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='vendor_sales')
+    status = models.CharField(max_length=20, choices=ITEM_STATUS_CHOICES, default='pending')
+    
+    # The EazyShop Business Model (Platform takes 10%, Seller keeps 90%)
+    platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    seller_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate the revenue split right before saving to the database
+        if not self.pk: # Only calculate on creation
+            price_decimal = Decimal(str(self.price))
+            quantity_decimal = Decimal(str(self.quantity))
+            
+            total_item_value = price_decimal * quantity_decimal
+            
+            # EazyShop takes a flat 10% cut
+            self.platform_fee = total_item_value * Decimal('0.10')
+            self.seller_earnings = total_item_value - self.platform_fee
+            
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} (Order #{self.order.id})"
+        return f"{self.quantity} x {self.product.name if self.product else 'Deleted Product'} (Order #{self.order.id})"
 
 
 # ==========================================

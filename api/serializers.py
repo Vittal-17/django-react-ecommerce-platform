@@ -80,9 +80,12 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ProductSerializer(serializers.ModelSerializer):
+    vendor_name = serializers.CharField(source='vendor.username', read_only=True)
+    
     class Meta:
         model = Product
         fields = '__all__'
+        read_only_fields = ['id', 'vendor', 'approval_status', 'created_at']
 
 
 # ==========================================
@@ -102,6 +105,12 @@ class CartItemSerializer(serializers.ModelSerializer):
         if not product and self.instance:
             product = self.instance.product
         quantity = data.get('quantity', 1)
+
+        # 🚀 NEW SECURITY CHECK: Block unapproved or inactive products
+        if product and (not getattr(product, 'is_active', True) or getattr(product, 'approval_status', 'approved') != 'approved'):
+            raise serializers.ValidationError({
+                'product': "This product is pending approval and cannot be purchased yet."
+            })
 
         if product and quantity > product.stock:
             raise serializers.ValidationError({
@@ -128,8 +137,12 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
-        fields = ['product', 'quantity', 'price', 'name', 'description', 'image_url']
-        read_only_fields = ['id', 'price']
+        # 🚀 Exposing 'id', 'order', 'status', and 'seller_earnings' to the frontend!
+        fields = [
+            'id', 'order', 'product', 'quantity', 'price', 
+            'name', 'description', 'image_url', 'status', 'seller_earnings'
+        ]
+        read_only_fields = ['id', 'price', 'seller_earnings', 'order']
 
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True)
@@ -171,14 +184,24 @@ class OrderSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
             total_price = 0
+                
             for item_data in order_items_data:
                 product = Product.objects.select_for_update().get(id=item_data['product'].id)
+                    
+                # 🚨 SECURITY CHECK: Ensure product hasn't been soft-deleted or rejected
+                if not getattr(product, 'is_active', True) or getattr(product, 'approval_status', 'approved') != 'approved':
+                    raise serializers.ValidationError(f"Checkout failed: '{product.name}' is no longer available.")
+
                 if item_data['quantity'] > product.stock:
                     raise serializers.ValidationError(f"Checkout failed: '{product.name}' only has {product.stock} units left.")
-                
+                    
                 actual_price = product.price 
                 total_price += item_data['quantity'] * actual_price
+                    
+                # Inject server-verified data into the dictionary
                 item_data['price'] = actual_price
+                item_data['vendor'] = product.vendor # 🚀 THIS ROUTES THE FUNDS!
+                    
                 product.stock -= item_data['quantity']
                 product.save()
 
@@ -188,7 +211,7 @@ class OrderSerializer(serializers.ModelSerializer):
                 OrderItem.objects.create(order=order, **item_data)
 
             CartItem.objects.filter(cart__user=self.context['request'].user).delete()
-
+                
         return order
 
 
