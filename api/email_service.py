@@ -1,9 +1,13 @@
+# email_service.py
 import sys
 import threading
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils.html import strip_tags
 from .models import Payment
+
+# 🚀 Fetch the dynamic production URL (Defaults to localhost for local testing)
+FRONTEND_URL = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000').rstrip('/')
 
 def _send_html_email(to_email, subject, html_content):
     """Core function to send HTML emails using the Django Anymail (Brevo) Bridge"""
@@ -67,7 +71,7 @@ def send_welcome_email(to_email, username):
     <p style="font-size: 16px; color: #475569;">We are thrilled to have you join the EazyShop family. Get ready to discover amazing products, unbeatable prices, and lightning-fast delivery.</p>
     
     <div style="text-align: center; margin: 45px 0;">
-        <a href="http://localhost:3000/products" style="background-color: {theme_color}; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 50px; font-size: 16px; font-weight: 700; display: inline-block; box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25); text-transform: uppercase; letter-spacing: 1px;">Start Shopping Now</a>
+        <a href="{FRONTEND_URL}/products" style="background-color: {theme_color}; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 50px; font-size: 16px; font-weight: 700; display: inline-block; box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25); text-transform: uppercase; letter-spacing: 1px;">Start Shopping Now</a>
     </div>
     
     <p style="font-size: 15px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center;">If you ever need help, just reply to this email. Our support team has your back.</p>
@@ -166,7 +170,7 @@ def send_order_email(to_email, username, order_id, status, total, payment_method
     </div>
     
     <p style="font-size: 14px; text-align: center; color: #64748b; margin-top: 30px;">
-        Track your full order history anytime in your <a href="http://localhost:3000/dashboard" style="color: {theme_color}; text-decoration: none; font-weight: 600;">EazyShop Dashboard</a>.
+        Track your full order history anytime in your <a href="{FRONTEND_URL}/dashboard" style="color: {theme_color}; text-decoration: none; font-weight: 600;">EazyShop Dashboard</a>.
     </p>
     """
     html = get_base_template(theme_color, header_title, icon, body)
@@ -210,7 +214,7 @@ def send_vendor_new_order_email(to_email, username, order_id, product_name, quan
     </div>
     
     <p style="font-size: 14px; text-align: center; color: #64748b; margin-top: 30px;">
-        Please log into your <a href="http://localhost:3000/vendor" style="color: {theme_color}; text-decoration: none; font-weight: 600;">Vendor HQ</a> to update the shipping status.
+        Please log into your <a href="{FRONTEND_URL}/vendor" style="color: {theme_color}; text-decoration: none; font-weight: 600;">Vendor HQ</a> to update the shipping status.
     </p>
     """
     html = get_base_template(theme_color, header_title, icon, body)
@@ -248,14 +252,14 @@ def send_vendor_product_status_email(to_email, username, product_name, status, a
     {admin_note_html}
     
     <div style="text-align: center; margin: 40px 0;">
-        <a href="http://localhost:3000/vendor" style="background-color: {theme_color}; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block;">View Vendor Dashboard</a>
+        <a href="{FRONTEND_URL}/vendor" style="background-color: {theme_color}; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block;">View Vendor Dashboard</a>
     </div>
     """
     html = get_base_template(theme_color, header_title, icon, body)
     return _send_html_email(to_email, subject, html)
 
 # ==========================================
-# ASYNC WRAPPERS (Placed at the bottom to resolve NameErrors)
+# ASYNC WRAPPERS
 # ==========================================
 
 def _safe_async_dispatch(target_func, *args, **kwargs):

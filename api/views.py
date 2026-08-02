@@ -319,7 +319,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_status = instance.status
         new_instance = serializer.save()
+        
         if old_status != new_instance.status:
+            # 🚀 CASCADE STATUS SYNC: Instantly update all related vendor items!
+            new_instance.order_items.update(status=new_instance.status)
+            
             log_admin_action(self.request.user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
             self.send_order_status_email(new_instance)
 
