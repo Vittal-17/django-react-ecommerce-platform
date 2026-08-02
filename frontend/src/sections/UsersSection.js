@@ -1,9 +1,11 @@
+// src/sections/UsersSection.jsx
 import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
 import { toast } from "react-hot-toast";
 import { FaTimes, FaUser, FaUserShield, FaTrash, FaEdit, FaStore } from 'react-icons/fa';
+import ModalPortal from '../components/ModalPortal';
 
 const UsersSection = () => {
   const { axiosInstance } = useContext(AuthContext);
@@ -54,24 +56,23 @@ const UsersSection = () => {
       <SectionTitle>👥 Manage Users</SectionTitle>
       <ul style={{ padding: 0, listStyle: 'none' }}>
         {users.map(u => (
-          <ListItem key={u.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <ListItem key={u.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -2 }}>
             <div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#333' }}>{u.username}</div>
-              <div style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.2rem' }}>{u.email}</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0F172A' }}>{u.username}</div>
+              <div style={{ color: '#64748B', fontSize: '0.95netrem', marginTop: '0.2rem', fontWeight: '500' }}>{u.email}</div>
             </div>
             <ControlsWrapper>
-              {/* 🚀 Dynamic Role Trigger Button handling all 3 roles */}
               <RoleTriggerButton 
                 $role={u.role} 
                 onClick={() => setActiveUser(u)} 
-                whileHover={{ scale: 1.05 }} 
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }}
               >
                 {u.role === 'admin' ? <FaUserShield /> : u.role === 'seller' ? <FaStore /> : <FaUser />} 
                 {u.role} 
                 <FaEdit style={{ marginLeft: '4px' }} />
               </RoleTriggerButton>
-              <DeleteButton onClick={() => { setUserToDelete(u.id); setIsDeleteModalOpen(true); }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <DeleteButton onClick={() => { setUserToDelete(u.id); setIsDeleteModalOpen(true); }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                 <FaTrash /> Delete
               </DeleteButton>
             </ControlsWrapper>
@@ -81,7 +82,7 @@ const UsersSection = () => {
 
       {totalPages > 1 && (
         <PaginationWrapper>
-          <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Previous</PageButton>
+          <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Prev</PageButton>
           <PageInfo>Page {currentPage} of {totalPages}</PageInfo>
           <PageButton onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next &rarr;</PageButton>
         </PaginationWrapper>
@@ -90,39 +91,41 @@ const UsersSection = () => {
       {/* Modals */}
       <AnimatePresence>
         {isDeleteModalOpen && (
+          <ModalPortal>
           <ConfirmOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ConfirmCard>
-              <h3>Delete User</h3><p>Delete this user profile entirely? They will lose all access.</p>
+            <ConfirmCard initial={{ scale: 0.9, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 10 }}>
+              <h3>Delete User</h3>
+              <p>Delete this user profile entirely? They will lose all access.</p>
               <ButtonGroup>
                 <CancelBtn onClick={() => setIsDeleteModalOpen(false)}>Cancel</CancelBtn>
                 <ConfirmDeleteBtn onClick={executeDelete}>Yes, Delete</ConfirmDeleteBtn>
               </ButtonGroup>
             </ConfirmCard>
           </ConfirmOverlay>
+          </ModalPortal>
         )}
         {activeUser && (
+          <ModalPortal>
           <ModalOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveUser(null)}>
-            <ModalCard onClick={e => e.stopPropagation()}>
+            <ModalCard initial={{ scale: 0.9, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 10 }} onClick={e => e.stopPropagation()}>
               <CloseButton onClick={() => setActiveUser(null)}><FaTimes /></CloseButton>
-              <h3 style={{ margin: '0 0 1.5rem 0', color: '#2c3e50', textAlign: 'center' }}>Set Role for {activeUser.username}</h3>
+              <h3 style={{ margin: '0 0 1.5rem 0', color: '#0F172A', textAlign: 'center', fontWeight: '800' }}>Set Role for {activeUser.username}</h3>
               
-              {/* 🟢 Standard User Option */}
-              <StatusOptionBtn $bg="#e8f5e9" $fg="#2e7d32" $borderColor="#4CAF50" $active={activeUser.role === 'user'} onClick={() => handleRoleChange(activeUser.id, 'user')}>
+              <StatusOptionBtn $bg="#ECFDF5" $fg="#047857" $borderColor="#10B981" $active={activeUser.role === 'user'} onClick={() => handleRoleChange(activeUser.id, 'user')} whileHover={{ scale: 1.02 }}>
                 <FaUser /> <span style={{ flex: 1, textAlign: 'left' }}>Standard User</span> {activeUser.role === 'user' && <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>(Current)</span>}
               </StatusOptionBtn>
               
-              {/* 🔵 Vendor / Seller Option */}
-              <StatusOptionBtn $bg="#e0f2fe" $fg="#0369a1" $borderColor="#0284c7" $active={activeUser.role === 'seller'} onClick={() => handleRoleChange(activeUser.id, 'seller')}>
+              <StatusOptionBtn $bg="#DBEAFE" $fg="#1D4ED8" $borderColor="#3B82F6" $active={activeUser.role === 'seller'} onClick={() => handleRoleChange(activeUser.id, 'seller')} whileHover={{ scale: 1.02 }}>
                 <FaStore /> <span style={{ flex: 1, textAlign: 'left' }}>Vendor / Seller</span> {activeUser.role === 'seller' && <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>(Current)</span>}
               </StatusOptionBtn>
               
-              {/* 🔴 Administrator Option */}
-              <StatusOptionBtn $bg="#fee2e2" $fg="#991b1b" $borderColor="#ef4444" $active={activeUser.role === 'admin'} onClick={() => handleRoleChange(activeUser.id, 'admin')}>
+              <StatusOptionBtn $bg="#FEF2F2" $fg="#B91C1C" $borderColor="#EF4444" $active={activeUser.role === 'admin'} onClick={() => handleRoleChange(activeUser.id, 'admin')} whileHover={{ scale: 1.02 }}>
                 <FaUserShield /> <span style={{ flex: 1, textAlign: 'left' }}>Administrator</span> {activeUser.role === 'admin' && <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>(Current)</span>}
               </StatusOptionBtn>
               
             </ModalCard>
           </ModalOverlay>
+          </ModalPortal>
         )}
       </AnimatePresence>
     </motion.div>
@@ -132,31 +135,32 @@ const UsersSection = () => {
 export default UsersSection;
 
 // STYLED COMPONENTS
-const SectionTitle = styled.h2` color: #2e7d32; margin-bottom: 1.5rem; font-size: 1.5rem; `;
-const ListItem = styled(motion.li)` background: #ffffff; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 4px 12px rgba(46,125,50,0.05); border: 1px solid #e8f5e9; @media (min-width: 768px) { flex-direction: row; justify-content: space-between; align-items: center; } `;
+const SectionTitle = styled.h2` color: #0F172A; margin-bottom: 1.5rem; font-size: 1.5rem; font-weight: 800; `;
+const ListItem = styled(motion.li)` background: #ffffff; padding: 1.8rem; border-radius: 20px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid rgba(11, 132, 87, 0.08); @media (min-width: 768px) { flex-direction: row; justify-content: space-between; align-items: center; } `;
 const ControlsWrapper = styled.div` display: flex; gap: 0.8rem; width: 100%; @media (min-width: 768px) { width: auto; align-items: center; } `;
 
-// 🚀 Updated RoleTriggerButton to handle dynamic role colors
 const RoleTriggerButton = styled(motion.button)` 
-  display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; border: none; cursor: pointer; flex: 1; 
-  background-color: ${props => props.$role === 'admin' ? '#fee2e2' : props.$role === 'seller' ? '#e0f2fe' : '#e8f5e9'}; 
-  color: ${props => props.$role === 'admin' ? '#991b1b' : props.$role === 'seller' ? '#0369a1' : '#2e7d32'}; 
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.6rem 1.2rem; border-radius: 12px; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; border: none; cursor: pointer; flex: 1; 
+  background-color: ${props => props.$role === 'admin' ? '#FEF2F2' : props.$role === 'seller' ? '#DBEAFE' : '#ECFDF5'}; 
+  color: ${props => props.$role === 'admin' ? '#B91C1C' : props.$role === 'seller' ? '#1D4ED8' : '#047857'}; 
+  border: 1px solid ${props => props.$role === 'admin' ? 'rgba(239, 68, 68, 0.3)' : props.$role === 'seller' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'};
   &:hover { filter: brightness(0.95); } 
-  @media (min-width: 768px) { flex: initial; min-width: 140px; } 
+  @media (min-width: 768px) { flex: initial; min-width: 150px; } 
 `;
 
-const DeleteButton = styled(motion.button)` padding: 0.6rem 1rem; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; flex: 1; gap: 0.4rem; &:hover { background: #c0392b; } @media (min-width: 768px) { flex: initial; } `;
-// Pagination Styles
-const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2rem; padding-bottom: 1rem; `;
-const PageButton = styled.button` padding: 0.6rem 1.2rem; border-radius: 8px; border: none; font-weight: bold; background: ${props => props.disabled ? '#e0e0e0' : '#4caf50'}; color: ${props => props.disabled ? '#9e9e9e' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; &:hover:not(:disabled) { background: #388e3c; } `;
-const PageInfo = styled.span` font-weight: bold; color: #555; background: #f5f5f5; padding: 0.6rem 1rem; border-radius: 8px; `;
-// Modals
-const ModalOverlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; `;
-const ModalCard = styled(motion.div)` background: white; width: 90%; max-width: 400px; border-radius: 20px; padding: 2rem; position: relative; `;
-const CloseButton = styled.button` position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; font-size: 1.2rem; color: #999; cursor: pointer; `;
-const StatusOptionBtn = styled(motion.button)` display: flex; align-items: center; gap: 1rem; width: 100%; padding: 1rem 1.5rem; margin-bottom: 0.8rem; border: 2px solid ${props => props.$active ? props.$borderColor : 'transparent'}; border-radius: 12px; background-color: ${props => props.$bg}; color: ${props => props.$fg}; font-size: 1.1rem; font-weight: 600; cursor: pointer; &:hover { filter: brightness(0.95); } `;
-const ConfirmOverlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem; `;
-const ConfirmCard = styled(motion.div)` background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; `;
+const DeleteButton = styled(motion.button)` padding: 0.6rem 1.2rem; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: 12px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; flex: 1; gap: 0.4rem; &:hover { background: #FEE2E2; } @media (min-width: 768px) { flex: initial; } `;
+
+const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 3rem; padding-bottom: 1rem; `;
+const PageButton = styled.button` padding: 0.6rem 1.4rem; border-radius: 50px; border: none; font-weight: 700; background: ${props => props.disabled ? '#F1F5F9' : '#0B8457'}; color: ${props => props.disabled ? '#94A3B8' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; box-shadow: ${props => props.disabled ? 'none' : '0 4px 10px rgba(11, 132, 87, 0.2)'}; &:hover:not(:disabled) { background: #086341; transform: translateY(-1px); } `;
+const PageInfo = styled.span` font-weight: 700; color: #334155; font-size: 0.95rem; background: #ffffff; padding: 0.6rem 1.2rem; border-radius: 50px; border: 1px solid #E2E8F0; `;
+
+const ModalOverlay = styled(motion.div)` position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem; `;
+const ModalCard = styled(motion.div)` background: white; width: 90%; max-width: 420px; border-radius: 24px; padding: 2.5rem; position: relative; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid rgba(11, 132, 87, 0.1); `;
+const CloseButton = styled.button` position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; font-size: 1.2rem; color: #94A3B8; cursor: pointer; &:hover { color: #0F172A; } `;
+const StatusOptionBtn = styled(motion.button)` display: flex; align-items: center; gap: 1rem; width: 100%; padding: 1rem 1.2rem; margin-bottom: 0.8rem; border: 2px solid ${props => props.$active ? props.$borderColor : 'transparent'}; border-radius: 14px; background-color: ${props => props.$bg}; color: ${props => props.$fg}; font-size: 1.05rem; font-weight: 700; cursor: pointer; &:hover { filter: brightness(0.95); } `;
+
+const ConfirmOverlay = styled(motion.div)` position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem; `;
+const ConfirmCard = styled(motion.div)` background: white; padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 420px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); h3 { margin-top: 0; color: #0F172A; font-weight: 800; } p { color: #64748B; margin-bottom: 2rem; line-height: 1.5; } `;
 const ButtonGroup = styled.div` display: flex; gap: 1rem; justify-content: center; `;
-const ConfirmDeleteBtn = styled.button` padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: #d32f2f; color: #ffffff; &:hover { background: #b71c1c; } `;
-const CancelBtn = styled.button` padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: #757575; color: #ffffff; &:hover { background: #616161; } `;
+const ConfirmDeleteBtn = styled.button` padding: 0.9rem 1.5rem; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; background: #EF4444; color: #ffffff; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); &:hover { background: #DC2626; } `;
+const CancelBtn = styled.button` padding: 0.9rem 1.5rem; border: 1px solid #E2E8F0; border-radius: 12px; cursor: pointer; font-weight: 700; background: #ffffff; color: #475569; &:hover { background: #F8FAFC; color: #0F172A; } `;

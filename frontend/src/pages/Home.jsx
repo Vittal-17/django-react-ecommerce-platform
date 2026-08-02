@@ -1,72 +1,177 @@
-import { useContext } from 'react';
+// src/pages/Home.jsx
 import { useNavigate } from 'react-router-dom';
-import AuthContext from '../context/AuthContext';
-import Navbar from '../components/Navbar';
-import '../components/Home/Home.css';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
+import homeBgImage from '../assets/home.jpg'; 
 
 const Home = () => {
-  const navigate = useNavigate(); 
-  // eslint-disable-next-line
-  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   return (
-    <div className="home-container">
-      <Navbar />
+    <HeroContainer>
+      <BackgroundWrapper>
+        <BackgroundImage src={homeBgImage} alt="EazyShop 3D eCommerce" />
+      </BackgroundWrapper>
       
-      <div className="content-wrapper">
-        <div className="space-y-8">
-          <h1 className="hero-heading text-transparent bg-clip-text bg-gradient-to-r from-blue-800 to-indigo-900">
-            Welcome to EazyShop
-          </h1>
-          
-          <p className="subtitle text-gray-800">
-            Discover curated collections and experience effortless shopping 
-            with our seamless platform
-          </p>
-        </div>
+      <GlassCard
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
+        <HeroTitle 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5, type: "spring", stiffness: 300, damping: 24 }}
+        >
+          Welcome to EazyShop
+        </HeroTitle>
+        
+        <Subtitle 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35, duration: 0.5, type: "spring", stiffness: 300, damping: 24 }}
+        >
+          Discover curated collections and experience effortless shopping with our seamless platform.
+        </Subtitle>
+        
         <CTAButton 
-  onClick={() => navigate('/products')}
-  whileHover={{ scale: 1.05, y: -2 }}
-  whileTap={{ scale: 0.95 }}
-  initial={{ opacity: 0, y: 20 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.5, type: 'spring', stiffness: 200 }}
->
-  <span className="icon">🛍️</span> Start Shopping
-</CTAButton>
-      </div>
-    </div>
+          onClick={() => navigate('/products')}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.5, type: "spring", stiffness: 300, damping: 24 }}
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <span className="icon">🛍️</span> Start Shopping
+        </CTAButton>
+      </GlassCard>
+    </HeroContainer>
   );
 };
 
+// --- STYLED COMPONENTS ---
+
+const HeroContainer = styled.div`
+  position: relative;
+  width: 100%;
+  min-height: 100vh; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding-top: 76px;
+  box-sizing: border-box;
+`;
+
+const BackgroundWrapper = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  filter: blur(4px);
+  transform: scale(1.02);
+`;
+
+const BackgroundImage = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9; 
+  display: block; 
+`;
+
+const GlassCard = styled(motion.div)`
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 24px;
+  padding: 4rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 90%;
+  max-width: 850px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  /* Force hardware acceleration to prevent repaint glitches */
+  will-change: transform, opacity;
+`;
+
+const HeroTitle = styled(motion.h1)`
+  font-size: clamp(3rem, 6vw, 4.5rem);
+  font-weight: 900;
+  color: #0B8457; 
+  margin-bottom: 1.2rem;
+  letter-spacing: -1px;
+  /* Isolated stacking context to prevent blur bleed */
+  position: relative;
+  z-index: 2;
+`;
+
+const Subtitle = styled(motion.p)`
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  color: #1a1a1a;
+  margin-bottom: 2.5rem;
+  font-weight: 600;
+  line-height: 1.6;
+  max-width: 600px;
+  /* Isolated stacking context to prevent blur bleed */
+  position: relative;
+  z-index: 2;
+`;
+
 const CTAButton = styled(motion.button)`
-  background: linear-gradient(135deg, #4CAF50 0%, #2e7d32 100%);
+  background: #0B8457; 
   color: white;
   border: none;
   padding: 1rem 2.5rem;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  border-radius: 50px; /* Perfect pill shape */
+  border-radius: 50px;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(46, 125, 50, 0.3);
-  margin-top: 2rem;
+  box-shadow: 0 6px 16px rgba(11, 132, 87, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  margin-inline: auto; /* Centers the button */
-  text-transform: capitalize;
-  letter-spacing: 0.5px;
+  position: relative;
+  overflow: hidden;
+  z-index: 2;
   
   .icon {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
+    z-index: 2;
   }
   
-  /* The hover state smoothly intensifies the glow */
+  /* Liquid Shimmer Effect */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transform: skewX(-25deg);
+    animation: shimmer 4s infinite;
+    z-index: 1;
+  }
+  
+  @keyframes shimmer {
+    0% { left: -150%; }
+    20% { left: 200%; }
+    100% { left: 200%; }
+  }
+  
   &:hover {
-    box-shadow: 0 12px 25px rgba(46, 125, 50, 0.5);
+    background: #096b46;
+    box-shadow: 0 8px 20px rgba(11, 132, 87, 0.5);
   }
 `;
 

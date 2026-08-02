@@ -479,6 +479,16 @@ class ReviewViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['product', 'user']
 
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Review.objects.select_related('user', 'product').all().order_by('-id')
+
+        # 🚀 SECURITY & SCOPING: If the user is a seller, restrict reviews to only their products.
+        if getattr(user, 'role', '') == 'seller':
+            queryset = queryset.filter(product__vendor=user)
+
+        return queryset
+
     def get_permissions(self):
         if self.action in ['destroy']:
             return [IsAdminOrOwner()]
@@ -557,6 +567,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+import threading
+
 class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer 
@@ -565,47 +580,58 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if getattr(user, 'role', '') != 'seller':
-            return OrderItem.objects.none()
-        return OrderItem.objects.filter(vendor=user).select_related('order', 'product').order_by('-id')
+        base_qs = OrderItem.objects.select_related('order', 'order__user', 'product').order_by('-id')
+        
+        if getattr(user, 'role', '') == 'admin':
+            return base_qs
+        if getattr(user, 'role', '') == 'seller':
+            return base_qs.filter(vendor=user)
+            
+        return OrderItem.objects.none()
 
     @action(detail=True, methods=['patch'])
     def update_status(self, request, pk=None):
         item = self.get_object()
         new_status = request.data.get('status')
+        user = request.user
         
+        # 🚨 SECURITY FIX: Vendors are strictly prohibited from marking items as 'delivered'.
+        # Only admins or users with admin roles can assign 'delivered'.
+        if new_status == 'delivered' and getattr(user, 'role', '') != 'admin':
+            return Response(
+                {"error": "Unauthorized: Vendors cannot mark items as delivered. Only administrators can verify delivery."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         if new_status not in ['shipped', 'delivered', 'cancelled']:
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
             
-        # 1. Update the individual item status
+        # 1. Update individual item status
         item.status = new_status
         item.save()
 
-        # 🚀 2. Automatically Sync the Parent Order Status!
+        # 🚀 2. Automatically Sync the Parent Order Status
         order = item.order
         all_items = order.order_items.all()
         
-        # If all items in this order are now delivered, mark the order delivered
         if all(i.status == 'delivered' for i in all_items):
             order.status = 'delivered'
-        # If any item is shipped (and none pending/cancelled improperly), mark order shipped
         elif any(i.status == 'shipped' for i in all_items):
             order.status = 'shipped'
         elif all(i.status == 'cancelled' for i in all_items):
             order.status = 'cancelled'
         order.save()
         
-        # 3. Trigger the customer email silently in the background
+        # 3. Trigger asynchronous customer notification email
         self.notify_customer_async(item)
         
         return Response({"message": f"Item marked as {new_status}"}, status=status.HTTP_200_OK)
 
     def notify_customer_async(self, item):
-        """Spins up a thread to alert the customer that their specific item shipped/delivered"""
+        """Spins up a background thread to alert the customer of item status updates."""
         def send_email():
             try:
                 order = item.order
-                # Look up the payment so the receipt looks official
                 payment = Payment.objects.filter(order=order).first()
                 
                 if payment:
@@ -615,12 +641,11 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
                     payment_method_display = "Completed"
                     transaction_id_display = "System Confirmed"
                 
-                # 🚀 Fire the HTML email to the customer!
                 send_order_email(
                     to_email=order.user.email,
                     username=order.user.username,
                     order_id=order.id,
-                    status=item.status,  # Passes 'shipped', 'delivered', or 'cancelled'
+                    status=item.status,  
                     total=order.total_price,
                     payment_method=payment_method_display,
                     txn_id=transaction_id_display,

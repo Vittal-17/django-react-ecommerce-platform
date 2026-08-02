@@ -134,16 +134,21 @@ class OrderItemSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='product.name', read_only=True)
     description = serializers.CharField(source='product.description', read_only=True)
     image_url = serializers.CharField(source='product.image_url', read_only=True)
+    
+    # 🚀 Add these fields to expose customer info and address directly to the vendor sale item
+    username = serializers.CharField(source='order.user.username', read_only=True)
+    shipping_address = serializers.CharField(source='order.shipping_address', read_only=True)
 
     class Meta:
         model = OrderItem
-        # 🚀 Exposing 'id', 'order', 'status', and 'seller_earnings' to the frontend!
         fields = [
             'id', 'order', 'product', 'quantity', 'price', 
-            'name', 'description', 'image_url', 'status', 'seller_earnings'
+            'name', 'description', 'image_url', 'status', 'seller_earnings',
+            'username', 'shipping_address'  # 🚀 Included here
         ]
-        read_only_fields = ['id', 'price', 'seller_earnings', 'order']
+        read_only_fields = ['id', 'price', 'seller_earnings', 'order', 'username', 'shipping_address']
 
+        
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True)
 

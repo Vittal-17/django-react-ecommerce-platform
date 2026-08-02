@@ -1,11 +1,14 @@
+// src/pages/Products.jsx
 import { useEffect, useState, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { FaSearch, FaShoppingCart, FaArrowRight, FaFilter, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaArrowRight, FaFilter, FaTimes, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
 import { SkeletonProductCard } from '../components/SkeletonLoader';
+import AppLayout from '../components/AppLayout';
+import {PageHeader } from '../styles/SharedPageStyles';
 
 const Products = () => {
   const { axiosInstance, user } = useContext(AuthContext);
@@ -72,7 +75,7 @@ const Products = () => {
       } catch (err) {
         console.error("Failed to load products", err);
       } finally {
-        setIsLoading(false); // 🚀 ADD THIS: Stop the skeleton loader
+        setIsLoading(false); 
       }
     };
 
@@ -114,7 +117,7 @@ const Products = () => {
         toast.success(t => (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span>🛒 <b>{product.name}</b> added to cart!</span>
-            <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#2e7d32', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>
+            <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#0B8457', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>
               Go to Cart <FaArrowRight size={12} />
             </Link>
           </div>
@@ -137,19 +140,44 @@ const Products = () => {
       toast.success(t => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <span>🛒 <b>{product.name}</b> added to guest cart!</span>
-          <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#2e7d32', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>Go to Cart <FaArrowRight size={12} /></Link>
+          <Link to="/cart/" onClick={() => toast.dismiss(t.id)} style={{ color: '#0B8457', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', marginTop: '4px' }}>Go to Cart <FaArrowRight size={12} /></Link>
         </div>
       ));
     }
   };
 
-  return (
-    <ProductsContainer>
-      <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>Our Products</motion.h1>
+  // Animation Variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.06 }
+    }
+  };
 
-      <FilterSection>
+  const cardVariants = {
+    hidden: { opacity: 0, y: 25 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 20 } }
+  };
+
+  return (
+    <AppLayout>
+      <PageHeader
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
+        <BadgeTag>Explore Catalog</BadgeTag>
+        <h1>Curated Collection</h1>
+        <p>Discover hand-picked premium items crafted for performance and elegance.</p>
+      </PageHeader>
+
+      <GlassControlHub>
         <FilterRow>
-          <SearchBar><FaSearch /><input type="text" placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} /></SearchBar>
+          <SearchBar>
+            <FaSearch className="icon" />
+            <input type="text" placeholder="Search by name, brand, or feature..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </SearchBar>
           <Select value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">All Categories</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -159,15 +187,21 @@ const Products = () => {
             <option value="price_asc">Price: Low to High</option>
             <option value="price_desc">Price: High to Low</option>
           </Select>
-          <AdvancedToggle onClick={() => setShowFilters(!showFilters)} $active={showFilters}><FaFilter /> Filters</AdvancedToggle>
+          <AdvancedToggle onClick={() => setShowFilters(!showFilters)} $active={showFilters}>
+            <FaFilter /> Filters
+          </AdvancedToggle>
         </FilterRow>
 
         <AnimatePresence>
           {showFilters && (
-            <AdvancedFilterPanel initial={{ opacity: 0, height: 0, padding: 0 }} animate={{ opacity: 1, height: 'auto', padding: '1.5rem 2rem' }} exit={{ opacity: 0, height: 0, padding: 0 }}>
-              <FilterColumn $justify="flex-end">
+            <AdvancedFilterPanel 
+              initial={{ opacity: 0, height: 0, marginTop: 0 }} 
+              animate={{ opacity: 1, height: 'auto', marginTop: '1.25rem' }} 
+              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            >
+              <FilterGrid>
                 <PriceSliderContainer>
-                  <label>Price Range:</label>
+                  <label>Max Budget</label>
                   <SliderTrack>
                     <TrackFill $min={(minPrice / highestPrice) * 100} $max={(maxPrice / highestPrice) * 100} />
                     <ThumbInput type="range" min="0" max={highestPrice} value={minPrice} onChange={(e) => setMinPrice(Math.min(Number(e.target.value), maxPrice - 1))} style={{ zIndex: minPrice > highestPrice * 0.9 ? 5 : 3 }} />
@@ -175,106 +209,568 @@ const Products = () => {
                   </SliderTrack>
                   <PriceLabel>${minPrice} - ${maxPrice}</PriceLabel>
                 </PriceSliderContainer>
-              </FilterColumn>
-              <FilterColumn $justify="center">
-                <ToggleSwitch><input type="checkbox" id="stockToggle" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} /><label htmlFor="stockToggle">In Stock Only</label></ToggleSwitch>
-              </FilterColumn>
-              <FilterColumn $justify="flex-start">
-                <ClearButtonWrapper>
-                  <AnimatePresence>
-                    {filtersActive && <ClearButton onClick={clearFilters} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><FaTimes /> Clear All</ClearButton>}
-                  </AnimatePresence>
-                </ClearButtonWrapper>
-              </FilterColumn>
+
+                <ToggleSwitch>
+                  <input type="checkbox" id="stockToggle" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} />
+                  <label htmlFor="stockToggle">In Stock Only</label>
+                </ToggleSwitch>
+
+                <AnimatePresence>
+                  {filtersActive && (
+                    <ClearButton 
+                      onClick={clearFilters} 
+                      initial={{ opacity: 0, scale: 0.9 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      whileHover={{ scale: 1.05 }} 
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <FaTimes /> Clear All
+                    </ClearButton>
+                  )}
+                </AnimatePresence>
+              </FilterGrid>
             </AdvancedFilterPanel>
           )}
         </AnimatePresence>
-      </FilterSection>
+      </GlassControlHub>
 
-      {isLoading ? (
-        // 🚀 SHOW SKELETONS WHILE FETCHING
-        <ProductGrid>
-          {[...Array(8)].map((_, index) => (
-            <SkeletonProductCard key={index} />
-          ))}
-        </ProductGrid>
-      ) : filtered.length === 0 ? (
-        // SHOW EMPTY STATE IF NO MATCHES
-        <EmptyState></EmptyState>
-      ) : (
-        // SHOW ACTUAL PRODUCTS
-        <ProductGrid>
-          {filtered.map((product, index) => {
-            const qty = quantities[product.id] || 1;
-            const isAtLimit = qty >= product.stock;
+      <ProductsContainer>
+        {isLoading ? (
+          <ProductGrid>
+            {[...Array(8)].map((_, index) => <SkeletonProductCard key={index} />)}
+          </ProductGrid>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <span className="emoji">🔍</span>
+            <h3>No Products Matching Criteria</h3>
+            <p>We couldn't find anything matching your current search or filters.</p>
+            {filtersActive && (
+              <button className="reset-btn" onClick={clearFilters}>Reset All Filters</button>
+            )}
+          </EmptyState>
+        ) : (
+          <ProductGrid
+            as={motion.div}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <AnimatePresence mode='popLayout'>
+              {filtered.map((product) => {
+                const qty = quantities[product.id] || 1;
+                const isAtLimit = qty >= product.stock;
 
-            return (
-              <ProductCard key={product.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.05, 0.3) }} whileHover={{ y: -4 }}>
-                {product.image && (
-                  <ProductImage><Link to={`/products/${product.id}/`}><img src={product.image} alt={product.name} /></Link></ProductImage>
-                )}
-                <ProductInfo>
-                  <h3><Link to={`/products/${product.id}/`} style={{ color: '#2e7d32', textDecoration: 'none' }}>{product.name}</Link></h3>
-                  <p>{product.description?.slice(0, 55)}...</p>
-                  <Price>${product.price.toFixed(2)}</Price>
-                  
-                  <QuantityControl>
-                    <button onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.max(1, prev[product.id] - 1) }))} disabled={qty <= 1}>-</button>
-                    <span>{qty}</span>
-                    <button disabled={isAtLimit} onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.min(product.stock, prev[product.id] + 1) }))} style={{ opacity: isAtLimit ? 0.5 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
-                  </QuantityControl>
-                  
-                  {isAtLimit ? <LimitWarning>Only {product.stock} left!</LimitWarning> : product.stock === 0 ? <LimitWarning>Out of Stock</LimitWarning> : null}
-                  <AddToCartButton onClick={() => addToCart(product)} disabled={product.stock === 0} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ opacity: product.stock === 0 ? 0.6 : 1 }}>
-                    <FaShoppingCart /> {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-                  </AddToCartButton>
-                </ProductInfo>
-              </ProductCard>
-            );
-          })}
-        </ProductGrid>
-      )}
+                return (
+                  <ProductCard 
+                    key={product.id} 
+                    layout
+                    variants={cardVariants}
+                    whileHover={{ y: -8 }}
+                  >
+                    {product.image && (
+                      <ProductImage>
+                        {/* Floating Stock Badge */}
+                        <StockBadge $stock={product.stock}>
+                          {product.stock > 5 ? (
+                            <><FaCheckCircle size={10} /> In Stock</>
+                          ) : product.stock > 0 ? (
+                            <><FaExclamationTriangle size={10} /> Low Stock ({product.stock})</>
+                          ) : (
+                            <>Out of Stock</>
+                          )}
+                        </StockBadge>
 
-      {totalPages > 1 && (
-        <PaginationWrapper>
-          <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Previous</PageButton>
-          <PageInfo>Page {currentPage} of {totalPages}</PageInfo>
-          <PageButton onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next &rarr;</PageButton>
-        </PaginationWrapper>
-      )}
-    </ProductsContainer>
+                        <Link to={`/products/${product.id}/`}>
+                          <img src={product.image} alt={product.name} />
+                        </Link>
+                      </ProductImage>
+                    )}
+                    <ProductInfo>
+                      <div className="meta">
+                        <Link to={`/products/${product.id}/`} className="title">{product.name}</Link>
+                        <p className="desc">{product.description?.slice(0, 65)}...</p>
+                      </div>
+                      
+                      <PriceRow>
+                        <Price>${product.price.toFixed(2)}</Price>
+                        
+                        <QuantityControl>
+                          <button onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.max(1, prev[product.id] - 1) }))} disabled={qty <= 1}>-</button>
+                          <span>{qty}</span>
+                          <button disabled={isAtLimit} onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.min(product.stock, prev[product.id] + 1) }))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
+                        </QuantityControl>
+                      </PriceRow>
+                      
+                      <AddToCartButton 
+                        onClick={() => addToCart(product)} 
+                        disabled={product.stock === 0} 
+                        whileTap={{ scale: 0.96 }} 
+                        $outOfStock={product.stock === 0}
+                      >
+                        <FaShoppingCart /> {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                      </AddToCartButton>
+                    </ProductInfo>
+                  </ProductCard>
+                );
+              })}
+            </AnimatePresence>
+          </ProductGrid>
+        )}
+
+        {totalPages > 1 && (
+          <PaginationWrapper>
+            <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Prev</PageButton>
+            <PageInfo>Page {currentPage} of {totalPages}</PageInfo>
+            <PageButton onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next &rarr;</PageButton>
+          </PaginationWrapper>
+        )}
+      </ProductsContainer>
+    </AppLayout>
   );
 };
 
 export default Products;
 
-// --- STYLED COMPONENTS ---
-const ProductsContainer = styled.div` padding: 7rem 2rem 2rem 2rem; max-width: 1200px; margin: 0 auto; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%); h1 { color: #2e7d32; text-align: center; margin-bottom: 2rem; font-size: 2.2rem; } @media (max-width: 600px) { padding: 6rem 0.75rem 1rem 0.75rem; h1 { font-size: 1.75rem; margin-bottom: 1.25rem; } }`;
-const FilterSection = styled.div` display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; width: 100%; `;
-const FilterRow = styled.div` display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: center; width: 100%; `;
-const SearchBar = styled.div` display: flex; align-items: center; background: white; padding: 0.6rem 1.2rem; border-radius: 30px; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1); flex: 1; min-width: 250px; max-width: 400px; input { border: none; margin-left: 0.5rem; font-size: 1rem; width: 100%; &:focus { outline: none; } } svg { color: #9e9e9e; }`;
-const Select = styled.select` padding: 0.6rem 1.2rem; border-radius: 30px; border: 2px solid #e0e0e0; background: white; font-size: 1rem; cursor: pointer; flex: 1; min-width: 160px; max-width: 200px; &:focus { outline: none; border-color: #4CAF50; }`;
-const AdvancedToggle = styled.button` display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; border-radius: 30px; border: 2px solid ${props => props.$active ? '#4CAF50' : '#e0e0e0'}; background: ${props => props.$active ? '#e8f5e9' : 'white'}; color: ${props => props.$active ? '#2e7d32' : '#333'}; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; &:hover { border-color: #4CAF50; }`;
-const AdvancedFilterPanel = styled(motion.div)` display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 2rem; background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(46,125,50,0.08); overflow: hidden; @media (max-width: 900px) { grid-template-columns: 1fr; justify-items: center; gap: 1.5rem; }`;
-const FilterColumn = styled.div` display: flex; align-items: center; justify-content: ${props => props.$justify}; width: 100%; @media (max-width: 900px) { justify-content: center; }`;
-const ClearButtonWrapper = styled.div` width: 120px; display: flex; align-items: center;`;
-const PriceSliderContainer = styled.div` display: flex; align-items: center; gap: 1rem; width: 100%; max-width: 450px; label { font-weight: 600; color: #424242; white-space: nowrap; } @media (max-width: 600px) { flex-direction: column; align-items: stretch; max-width: 100%; }`;
-const SliderTrack = styled.div` position: relative; height: 6px; background: #e0e0e0; border-radius: 4px; flex: 1; margin: 0 10px; display: flex; align-items: center;`;
-const TrackFill = styled.div` position: absolute; height: 100%; background: #4CAF50; border-radius: 4px; left: ${props => props.$min}%; right: ${props => 100 - props.$max}%;`;
-const ThumbInput = styled.input` position: absolute; width: 100%; -webkit-appearance: none; background: transparent; pointer-events: none; outline: none; &::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; background: white; border: 3px solid #4CAF50; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); } &::-moz-range-thumb { pointer-events: auto; width: 20px; height: 20px; background: white; border: 3px solid #4CAF50; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }`;
-const PriceLabel = styled.div` font-weight: 700; color: #2e7d32; font-size: 1rem; min-width: 90px; text-align: center; white-space: nowrap;`;
-const ToggleSwitch = styled.div` display: flex; align-items: center; gap: 0.5rem; margin-left: 1rem; label { font-weight: 600; color: #424242; cursor: pointer; } input[type="checkbox"] { width: 18px; height: 18px; accent-color: #4CAF50; cursor: pointer; } @media (max-width: 600px) { margin-left: 0; justify-content: center; }`;
-const ClearButton = styled(motion.button)` display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; background: #ffebee; color: #d32f2f; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; &:hover { background: #ffcdd2; }`;
-const EmptyState = styled.div` text-align: center; padding: 3rem; color: #757575; font-size: 1.2rem; font-style: italic; background: white; border-radius: 16px; `;
-const ProductGrid = styled.div` display: grid; gap: 1.25rem; width: 100%; box-sizing: border-box; grid-template-columns: 1fr; @media (min-width: 480px) { grid-template-columns: repeat(2, 1fr); } @media (min-width: 800px) { grid-template-columns: repeat(3, 1fr); } @media (min-width: 1100px) { grid-template-columns: repeat(4, 1fr); }`;
-const ProductCard = styled(motion.div)` background: white; border-radius: 16px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.08); display: flex; flex-direction: column; justify-content: space-between; height: 100%; box-sizing: border-box;`;
-const ProductImage = styled.div` width: 100%; aspect-ratio: 1 / 1; height: auto; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 8px; border-radius: 12px; margin-bottom: 0.75rem; overflow: hidden; img { width: 100%; height: 100%; object-fit: contain; display: block; }`;
-const ProductInfo = styled.div` display: flex; flex-direction: column; flex-grow: 1; h3 { font-size: 1.1rem; line-height: 1.4; height: 48px; display: flex; align-items: center; margin: 0 0 0.5rem 0; overflow: hidden; } p { color: #616161; font-size: 0.85rem; height: 38px; overflow: hidden; margin: 0 0 0.75rem 0; line-height: 1.4; }`;
-const Price = styled.div` font-size: 1.25rem; font-weight: 700; color: #1b5e20; margin-bottom: 0.75rem; `;
-const QuantityControl = styled.div` display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; margin-top: auto; button { background: #e8f5e9 !important; color: #2e7d32 !important; border: none; padding: 0.3rem 0.8rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; &:hover:not(:disabled) { background: #c8e6c9 !important; } } span { min-width: 25px; text-align: center; font-size: 0.95rem; }`;
-const AddToCartButton = styled(motion.button)` width: 100%; padding: 0.75rem; background: #4CAF50 !important; color: #ffffff !important; border: none; border-radius: 12px; font-weight: 600; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background-color 0.3s ease; &:hover:not(:disabled) { background: #388e3c !important; color: #ffffff !important; } &:active:not(:disabled) { background: #2e7d32 !important; color: #ffffff !important; }`;
-const LimitWarning = styled.p` color: #d32f2f; font-size: 0.75rem; margin: -0.25rem 0 0.75rem 0; font-weight: 600; height: auto !important; `;
-// Pagination Styles
-const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2rem; padding-bottom: 1rem; `;
-const PageButton = styled.button` padding: 0.6rem 1.2rem; border-radius: 8px; border: none; font-weight: bold; background: ${props => props.disabled ? '#e0e0e0' : '#4caf50'}; color: ${props => props.disabled ? '#9e9e9e' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; &:hover:not(:disabled) { background: #388e3c; } `;
-const PageInfo = styled.span` font-weight: bold; color: #555; background: #f5f5f5; padding: 0.6rem 1rem; border-radius: 8px; `;
+// ==========================================
+// PAGE SPECIFIC STYLED COMPONENTS
+// ==========================================
+
+const BadgeTag = styled.span`
+  display: inline-block;
+  background: rgba(11, 132, 87, 0.1);
+  color: #0B8457;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.3rem 0.9rem;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.8rem;
+  border: 1px solid rgba(11, 132, 87, 0.2);
+`;
+
+const GlassControlHub = styled.div`
+  position: sticky;
+  top: 86px; 
+  z-index: 50;
+  max-width: 1250px;
+  margin: 0 auto 2.5rem auto;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 1);
+  border-radius: 24px;
+  padding: 1.1rem 1.5rem;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  width: 92%;
+`;
+
+const FilterRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const SearchBar = styled.div`
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  padding: 0.7rem 1.2rem;
+  border-radius: 50px;
+  border: 1px solid #E5E7EB;
+  flex: 2;
+  min-width: 260px;
+  transition: all 0.2s ease;
+
+  &:focus-within {
+    border-color: #0B8457;
+    box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1);
+  }
+
+  input {
+    border: none;
+    margin-left: 0.6rem;
+    font-size: 0.95rem;
+    width: 100%;
+    color: #111827;
+    background: transparent;
+    &:focus { outline: none; }
+    &::placeholder { color: #9CA3AF; }
+  }
+  .icon { color: #9CA3AF; font-size: 1.1rem; }
+`;
+
+const Select = styled.select`
+  padding: 0.7rem 1.2rem;
+  border-radius: 50px;
+  border: 1px solid #E5E7EB;
+  background: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  flex: 1;
+  min-width: 160px;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+
+  &:focus { outline: none; border-color: #0B8457; box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1); }
+`;
+
+const AdvancedToggle = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.5rem;
+  border-radius: 50px;
+  border: 1px solid ${props => props.$active ? '#0B8457' : '#E5E7EB'};
+  background: ${props => props.$active ? '#0B8457' : '#ffffff'};
+  color: ${props => props.$active ? '#ffffff' : '#374151'};
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${props => props.$active ? '#086341' : '#F9FAFB'};
+  }
+`;
+
+const AdvancedFilterPanel = styled(motion.div)`
+  overflow: hidden;
+  border-top: 1px solid #E5E7EB;
+`;
+
+const FilterGrid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1rem 0 0.5rem 0;
+`;
+
+const PriceSliderContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
+  min-width: 300px;
+  
+  label { font-weight: 600; color: #374151; font-size: 0.95rem; }
+`;
+
+const SliderTrack = styled.div`
+  position: relative; height: 6px; background: #E5E7EB; border-radius: 4px; flex: 1; display: flex; align-items: center;
+`;
+const TrackFill = styled.div`
+  position: absolute; height: 100%; background: #0B8457; border-radius: 4px; left: ${props => props.$min}%; right: ${props => 100 - props.$max}%;
+`;
+const ThumbInput = styled.input`
+  position: absolute; width: 100%; -webkit-appearance: none; background: transparent; pointer-events: none; outline: none;
+  &::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; background: white; border: 3px solid #0B8457; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+  &::-moz-range-thumb { pointer-events: auto; width: 20px; height: 20px; background: white; border: 3px solid #0B8457; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+`;
+const PriceLabel = styled.div`
+  font-weight: 700; color: #0B8457; font-size: 0.95rem; min-width: 95px; text-align: right; font-variant-numeric: tabular-nums;
+`;
+
+const ToggleSwitch = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  label { font-weight: 600; color: #374151; cursor: pointer; font-size: 0.95rem; }
+  input[type="checkbox"] { width: 18px; height: 18px; accent-color: #0B8457; cursor: pointer; }
+`;
+
+const ClearButton = styled(motion.button)`
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1.2rem; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: 50px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  &:hover { background: #FEE2E2; }
+`;
+
+const ProductsContainer = styled.div`
+  position: relative;
+  z-index: 1;
+  max-width: 1500px; 
+  margin: 0 auto;
+  padding: 0 2.5rem;
+  box-sizing: border-box;
+`;
+
+const ProductGrid = styled(motion.div)`
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+`;
+
+const ProductCard = styled(motion.div)`
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 1.2rem;
+  border: 1px solid rgba(11, 132, 87, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+
+  &:hover {
+    border-color: rgba(11, 132, 87, 0.4);
+    box-shadow: 0 20px 40px -10px rgba(11, 132, 87, 0.15);
+  }
+`;
+
+const ProductImage = styled.div`
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #FFFFFF;
+  border-radius: 16px;
+  margin-bottom: 1.25rem;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #F1F5F9;
+
+  a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 1.5rem;
+    box-sizing: border-box;
+  }
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    mix-blend-mode: multiply; 
+  }
+  
+  &:hover img {
+    transform: scale(1.12);
+  }
+`;
+
+const StockBadge = styled.div`
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border-radius: 50px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  
+  background: ${props => 
+    props.$stock > 5 ? 'rgba(236, 253, 245, 0.9)' : 
+    props.$stock > 0 ? 'rgba(254, 243, 199, 0.9)' : 
+    'rgba(254, 226, 226, 0.9)'};
+    
+  color: ${props => 
+    props.$stock > 5 ? '#047857' : 
+    props.$stock > 0 ? '#B45309' : 
+    '#B91C1C'};
+    
+  border: 1px solid ${props => 
+    props.$stock > 5 ? 'rgba(16, 185, 129, 0.3)' : 
+    props.$stock > 0 ? 'rgba(245, 158, 11, 0.3)' : 
+    'rgba(239, 68, 68, 0.3)'};
+`;
+
+const ProductInfo = styled.div`
+  display: flex; 
+  flex-direction: column; 
+  flex-grow: 1;
+  
+  .meta {
+    flex-grow: 1;
+    margin-bottom: 1.2rem;
+  }
+  
+  .title {
+    font-size: 1.15rem; 
+    font-weight: 800; 
+    color: #111827; 
+    text-decoration: none; 
+    line-height: 1.35; 
+    display: -webkit-box; 
+    -webkit-line-clamp: 2; 
+    -webkit-box-orient: vertical; 
+    overflow: hidden; 
+    margin-bottom: 0.5rem; 
+    transition: color 0.2s;
+    
+    &:hover { color: #0B8457; }
+  }
+  
+  .desc { 
+    color: #6B7280; 
+    font-size: 0.88rem; 
+    line-height: 1.5; 
+  }
+`;
+
+const PriceRow = styled.div`
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  margin-bottom: 1.2rem;
+`;
+
+const Price = styled.div`
+  font-size: 1.45rem; 
+  font-weight: 900; 
+  color: #0F172A; 
+  letter-spacing: -0.5px;
+`;
+
+const QuantityControl = styled.div`
+  display: flex; 
+  align-items: center; 
+  background: #F8FAFC; 
+  border-radius: 50px; 
+  padding: 0.25rem;
+  border: 1px solid #E2E8F0;
+  
+  button { 
+    background: #ffffff; 
+    color: #334155; 
+    border: none; 
+    width: 28px; 
+    height: 28px; 
+    border-radius: 50%; 
+    cursor: pointer; 
+    font-weight: 800; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08); 
+    transition: all 0.2s ease;
+    
+    &:hover:not(:disabled) { 
+      background: #0B8457; 
+      color: white; 
+    }
+  }
+  
+  span { 
+    min-width: 30px; 
+    text-align: center; 
+    font-size: 0.9rem; 
+    font-weight: 700; 
+    color: #0F172A; 
+  }
+`;
+
+const AddToCartButton = styled(motion.button)`
+  width: 100%; 
+  padding: 0.9rem; 
+  background: ${props => props.$outOfStock ? '#F1F5F9' : 'linear-gradient(135deg, #0B8457 0%, #075E3E 100%)'}; 
+  color: ${props => props.$outOfStock ? '#94A3B8' : '#ffffff'}; 
+  border: none; 
+  border-radius: 14px; 
+  font-weight: 700; 
+  font-size: 0.95rem; 
+  cursor: ${props => props.$outOfStock ? 'not-allowed' : 'pointer'}; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  gap: 0.6rem; 
+  position: relative;
+  overflow: hidden;
+  box-shadow: ${props => props.$outOfStock ? 'none' : '0 4px 14px rgba(11, 132, 87, 0.25)'};
+  transition: all 0.3s ease;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    transform: skewX(-25deg);
+    animation: ${props => props.$outOfStock ? 'none' : 'shimmer 4s infinite'};
+  }
+  
+  @keyframes shimmer {
+    0% { left: -150%; }
+    20% { left: 200%; }
+    100% { left: 200%; }
+  }
+  
+  &:hover:not(:disabled) { 
+    box-shadow: 0 6px 20px rgba(11, 132, 87, 0.4); 
+  }
+`;
+
+const EmptyState = styled(motion.div)`
+  text-align: center; 
+  padding: 5rem 2rem; 
+  background: #ffffff; 
+  border-radius: 24px; 
+  border: 1px dashed #E2E8F0;
+  max-width: 600px;
+  margin: 0 auto;
+  
+  .emoji { font-size: 3.5rem; display: block; margin-bottom: 1rem; }
+  h3 { color: #0F172A; font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+  p { color: #64748B; font-size: 1rem; margin-bottom: 1.5rem; }
+  
+  .reset-btn {
+    background: #0B8457;
+    color: white;
+    border: none;
+    padding: 0.8rem 1.8rem;
+    border-radius: 50px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+    
+    &:hover { background: #086341; }
+  }
+`;
+
+const PaginationWrapper = styled.div`
+  display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 4rem;
+`;
+
+const PageButton = styled.button`
+  padding: 0.7rem 1.6rem; 
+  border-radius: 50px; 
+  border: none; 
+  font-weight: 700; 
+  background: ${props => props.disabled ? '#F1F5F9' : '#0B8457'}; 
+  color: ${props => props.disabled ? '#94A3B8' : 'white'}; 
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; 
+  transition: all 0.2s ease; 
+  box-shadow: ${props => props.disabled ? 'none' : '0 4px 12px rgba(11, 132, 87, 0.25)'};
+  
+  &:hover:not(:disabled) { 
+    background: #086341; 
+    transform: translateY(-2px); 
+  }
+`;
+
+const PageInfo = styled.span`
+  font-weight: 700; color: #334155; font-size: 0.95rem;
+`;

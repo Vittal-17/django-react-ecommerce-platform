@@ -1,12 +1,14 @@
+// src/pages/Login.jsx
 import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
-import { useNavigate, Link , useLocation } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 // eslint-disable-next-line
-import {toast, Toaster} from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import styled from 'styled-components';
-import GreenSpinner from '../components/GreenSpinner';
+import { FaSignInAlt, FaLock } from 'react-icons/fa';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import AppLayout from '../components/AppLayout';
 
 const Login = () => {
   const { loginUser } = useContext(AuthContext);
@@ -21,7 +23,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    setIsLoading(true); // 🚀 Screen locks instantly
+    setIsLoading(true); 
 
     if (!email || !password) {
       setIsLoading(false);
@@ -33,18 +35,10 @@ const Login = () => {
       const success = await loginUser(email, password);
 
       if (success === true) {
-        // Wait 1.5 seconds to show off the secure animation
         setTimeout(() => {
-          // 🚀 1. Fire the toast
           toast.success('✅ Login successful!', { duration: 2000, id: 'login-success' });
-          
-          // 🚀 2. Navigate immediately! 
-          // Notice we DO NOT set isLoading to false here. 
-          // Changing the route destroys the login page and the spinner simultaneously, 
-          // completely eliminating that awkward flash!
           navigate(from);
         }, 1500); 
-
       } else if (typeof success === 'object') {
         const messages = Object.values(success).flat().join(' ');
         setErrorMsg(messages);
@@ -64,154 +58,214 @@ const Login = () => {
 
   return (
     <>
-      {/* 🚀 Placed at the absolute root to guarantee it covers the whole screen */}
       <AnimatePresence>
-        {isLoading && <FullScreenSpinner message="Signing you into EazyShop..." />}
+        {isLoading && <FullScreenSpinner message="Authenticating credentials..." />}
       </AnimatePresence>
 
-      <LoginContainer>
-        <LoginCard
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Title>Welcome Back</Title>
-          <form onSubmit={handleSubmit}>
-            <InputField
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-            />
-            <InputField
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-            />
-            <SubmitButton
-              type="submit"
-              disabled={isLoading}
-              whileHover={{ scale: isLoading ? 1 : 1.02 }}
-              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+      <AppLayout>
+        {/* 🚀 AuthWrapper perfectly centers the card inside the AppLayout canvas */}
+        <AuthWrapper>
+          <LoginCard
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <IconWrapper
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
             >
-              {isLoading ? <GreenSpinner /> : 'Login'}
-            </SubmitButton>
-          </form>
+              <FaLock size={24} />
+            </IconWrapper>
+            
+            <Title>Welcome Back</Title>
+            <Subtitle>Sign in to access your EazyShop account</Subtitle>
+            
+            <form onSubmit={handleSubmit}>
+              <InputField
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              <InputField
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              
+              <SubmitButton
+                type="submit"
+                disabled={isLoading}
+                whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                whileTap={{ scale: isLoading ? 1 : 0.98 }}
+              >
+                {isLoading ? 'Authenticating...' : <><FaSignInAlt /> Secure Login</>}
+              </SubmitButton>
+            </form>
 
-          {errorMsg && (
-            <ErrorText
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              {errorMsg}
-            </ErrorText>
-          )}
+            {errorMsg && (
+              <ErrorText
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {errorMsg}
+              </ErrorText>
+            )}
 
-          <RegisterLink>
-            Don't have an account? <Link to="/register" state={{ from }}>Register now</Link>
-          </RegisterLink>
-        </LoginCard>
-      </LoginContainer>
+            <RegisterLink>
+              Don't have an account? <Link to="/register" state={{ from }}>Create one now</Link>
+            </RegisterLink>
+          </LoginCard>
+        </AuthWrapper>
+      </AppLayout>
     </>
   );
 };
 
-// Styled Components
-const LoginContainer = styled.div`
+// ==========================================
+// SAAS LEVEL STYLED COMPONENTS
+// ==========================================
+
+const AuthWrapper = styled.div`
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 20px;
+  justify-content: center;
+  min-height: 65vh; /* Centers the card vertically inside the canvas */
+  width: 100%;
+  padding: 2rem 1rem;
 `;
 
 const LoginCard = styled(motion.div)`
-  background: white;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(11, 132, 87, 0.12);
+  padding: 3rem 2.5rem;
+  border-radius: 24px;
+  box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.1);
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
   text-align: center;
 `;
 
+const IconWrapper = styled(motion.div)`
+  width: 60px;
+  height: 60px;
+  background: #ECFDF5;
+  color: #0B8457;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem auto;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.1);
+`;
+
 const Title = styled.h1`
-  color: #2c3e50;
-  margin-bottom: 30px;
-  font-size: 28px;
+  color: #0F172A;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+`;
+
+const Subtitle = styled.p`
+  color: #64748B;
+  font-size: 1rem;
+  margin-bottom: 2rem;
 `;
 
 const InputField = styled(motion.input)`
   width: 100%;
-  padding: 15px;
-  margin-bottom: 20px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 16px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.2rem;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  border-radius: 14px;
+  font-size: 1rem;
+  color: #0F172A;
   transition: all 0.3s ease;
   box-sizing: border-box;
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    background: #ffffff;
+    border-color: #0B8457;
+    box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1);
   }
 `;
 
 const SubmitButton = styled(motion.button)`
   width: 100%;
-  padding: 15px;
-  background: #4CAF50;
+  padding: 1.1rem;
+  background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 16px;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
   cursor: pointer;
-  transition: background 0.3s ease;
-  margin-bottom: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  box-shadow: 0 6px 20px rgba(11, 132, 87, 0.25);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
 
-  &:hover {
-    background: #45a049;
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    transform: skewX(-25deg);
+    animation: shimmer 4s infinite;
   }
+  
+  @keyframes shimmer { 0% { left: -150%; } 20% { left: 200%; } 100% { left: 200%; } }
 
-  &:disabled {
-    background: #a5d6a7;
-    cursor: not-allowed;
-  }
-`;
-
-const RegisterLink = styled.div`
-  margin-top: 20px;
-  color: #666;
-  font-size: 14px;
-
-  a {
-    color: #4CAF50;
-    text-decoration: none;
-    font-weight: 600;
-    margin-left: 5px;
-
-    &:hover {
-      color: #3d8b40;
-      text-decoration: underline;
-    }
-  }
+  &:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(11, 132, 87, 0.4); }
+  &:disabled { opacity: 0.7; cursor: not-allowed; &::after { display: none; } }
 `;
 
 const ErrorText = styled(motion.p)`
-  color: #e74c3c;
-  margin-top: 15px;
+  color: #DC2626;
+  background: #FEF2F2;
+  padding: 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #FCA5A5;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+`;
+
+const RegisterLink = styled.div`
+  margin-top: 2rem;
+  color: #64748B;
+  font-size: 0.95rem;
+
+  a {
+    color: #0B8457;
+    text-decoration: none;
+    font-weight: 700;
+    margin-left: 5px;
+    transition: color 0.2s ease;
+
+    &:hover { color: #075E3E; text-decoration: underline; }
+  }
 `;
 
 export default Login;

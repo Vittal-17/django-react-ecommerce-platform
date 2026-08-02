@@ -1,3 +1,4 @@
+// src/pages/Register.jsx
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -6,7 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "react-hot-toast";
 import AuthContext from '../context/AuthContext';
 import styled from 'styled-components';
-import FullScreenSpinner from '../components/FullScreenSpinner'; // 🚀 Added FullScreenSpinner
+import { FaUserPlus, FaCheckCircle, FaCircle } from 'react-icons/fa';
+import FullScreenSpinner from '../components/FullScreenSpinner'; 
+import AppLayout from '../components/AppLayout';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -64,31 +67,25 @@ const Register = () => {
 
   const validatePassword = () => {
     const errors = [];
-    
-    if (form.password.length < 8) {
-      errors.push('Your password must contain at least 8 characters.');
-    }
-    if (/^\d+$/.test(form.password)) {
-      errors.push('Your password can\'t be entirely numeric.');
-    }
+    if (form.password.length < 8) errors.push('Your password must contain at least 8 characters.');
+    if (/^\d+$/.test(form.password)) errors.push('Your password can\'t be entirely numeric.');
     if (form.password.toLowerCase().includes(form.username.toLowerCase()) || 
         form.password.toLowerCase().includes(form.email.split('@')[0].toLowerCase())) {
       errors.push('Your password can\'t be too similar to your other personal information.');
     }
-    
     return errors;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // 🚀 Screen locks instantly
+    setIsLoading(true); 
 
     const passwordErrors = validatePassword();
     if (passwordErrors.length > 0) {
-      setIsLoading(false); // Drop spinner
+      setIsLoading(false); 
       setTimeout(() => {
         passwordErrors.forEach(error => toast.error(error, { duration: 5000 }));
-      }, 250); // Delay toast to dodge the portal
+      }, 250); 
       return;
     }
 
@@ -101,15 +98,10 @@ const Register = () => {
     try {
       const res = await axios.post(`${API_URL}/api/register/`, form);
       if (res.status === 201) {
-        // Attempt background login
         const loginSuccess = await loginUser(form.email, form.password);
         
-        // 🚀 Wait 1.5 seconds to show off the secure animation
         setTimeout(() => {
           toast.success('✅ Registration successful!', { duration: 2000 });
-          
-          // 🚀 Navigate immediately WITHOUT setting isLoading to false!
-          // This destroys the page and the spinner at the same exact time.
           if (loginSuccess) {
               navigate(from);
           } else {
@@ -120,229 +112,283 @@ const Register = () => {
     } catch (err) {
       let errorMessage = 'Registration failed';
       if (err.response) {
-        if (err.response.data.email) {
-          errorMessage = err.response.data.email[0];
-        } else if (err.response.data.username) {
-          errorMessage = err.response.data.username[0];
-        } else if (err.response.data.password) {
-          errorMessage = err.response.data.password[0];
-        }
+        if (err.response.data.email) errorMessage = err.response.data.email[0];
+        else if (err.response.data.username) errorMessage = err.response.data.username[0];
+        else if (err.response.data.password) errorMessage = err.response.data.password[0];
       }
-      setIsLoading(false); // Drop spinner
+      setIsLoading(false); 
       setTimeout(() => toast.error(`❌ ${errorMessage}`, { duration: 5000 }), 250);
     } 
-    // 🚀 REMOVED THE FINALLY BLOCK ENTIRELY!
   };
 
   return (
     <>
-      {/* 🚀 Safely mounted at the top level to guarantee full screen coverage */}
       <AnimatePresence>
         {isLoading && <FullScreenSpinner message="Creating your account..." />}
       </AnimatePresence>
 
-      <RegisterContainer>
-        <RegisterCard
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Title>Create Account</Title>
-          <form onSubmit={handleSubmit}>
-            <InputField
-              type="text"
-              name="username"
-              placeholder="Username"
-              value={form.username}
-              onChange={handleChange}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-            />
-            <InputField
-              type="email"
-              name="email"
-              placeholder="Email"
-              value={form.email}
-              onChange={handleChange}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-            />
-            <InputField
-              type="password"
-              name="password"
-              placeholder="Password"
-              value={form.password}
-              onChange={handleChange}
-              onFocus={handlePasswordFocus}
-              onBlur={handlePasswordBlur}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-            />
-            
-            <PasswordRules $show={showPasswordRules}>
-              <PasswordRule $valid={passwordValidation.length}>
-                <RuleIcon>{passwordValidation.length ? '✓' : '•'}</RuleIcon>
-                At least 8 characters
-              </PasswordRule>
-              <PasswordRule $valid={passwordValidation.notNumeric}>
-                <RuleIcon>{passwordValidation.notNumeric ? '✓' : '•'}</RuleIcon>
-                Not entirely numeric
-              </PasswordRule>
-              <PasswordRule $valid={passwordValidation.notSimilar}>
-                <RuleIcon>{passwordValidation.notSimilar ? '✓' : '•'}</RuleIcon>
-                Not similar to personal info
-              </PasswordRule>
-            </PasswordRules>
-            
-            <InputField
-              type="password"
-              name="password2"
-              placeholder="Confirm Password"
-              value={form.password2}
-              onChange={handleChange}
-              onFocus={handlePasswordFocus}
-              onBlur={handlePasswordBlur}
-              required
-              disabled={isLoading}
-              whileFocus={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-            />
-            
-            <PasswordRule $valid={passwordValidation.matches} style={{ 
-              display: showPasswordRules ? 'flex' : 'none',
-              marginBottom: '15px'
-            }}>
-              <RuleIcon>{passwordValidation.matches ? '✓' : '•'}</RuleIcon>
-              Passwords match
-            </PasswordRule>
-
-            <SubmitButton
-              type="submit"
-              disabled={isLoading}
-              whileHover={{ scale: isLoading ? 1 : 1.02 }}
-              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+      <AppLayout>
+        {/* 🚀 AuthWrapper Perfectly Centers the Card */}
+        <AuthWrapper>
+          <RegisterCard
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <IconWrapper
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
             >
-              {isLoading ? 'Registering...' : 'Register'}
-            </SubmitButton>
-          </form>
-          
-          <LoginLink>
-            Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
-          </LoginLink>
-        </RegisterCard>
-      </RegisterContainer>
+              <FaUserPlus size={26} />
+            </IconWrapper>
+            
+            <Title>Create Account</Title>
+            <Subtitle>Join EazyShop and start shopping today</Subtitle>
+
+            <form onSubmit={handleSubmit}>
+              <InputField
+                type="text"
+                name="username"
+                placeholder="Username"
+                value={form.username}
+                onChange={handleChange}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              <InputField
+                type="email"
+                name="email"
+                placeholder="Email Address"
+                value={form.email}
+                onChange={handleChange}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              <InputField
+                type="password"
+                name="password"
+                placeholder="Password"
+                value={form.password}
+                onChange={handleChange}
+                onFocus={handlePasswordFocus}
+                onBlur={handlePasswordBlur}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              
+              {/* 🚀 Beautifully restyled dynamic password rules */}
+              <AnimatePresence>
+                {showPasswordRules && (
+                  <PasswordRules
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <PasswordRule $valid={passwordValidation.length}>
+                      {passwordValidation.length ? <FaCheckCircle /> : <FaCircle className="dot" />} At least 8 characters
+                    </PasswordRule>
+                    <PasswordRule $valid={passwordValidation.notNumeric}>
+                      {passwordValidation.notNumeric ? <FaCheckCircle /> : <FaCircle className="dot" />} Not entirely numeric
+                    </PasswordRule>
+                    <PasswordRule $valid={passwordValidation.notSimilar}>
+                      {passwordValidation.notSimilar ? <FaCheckCircle /> : <FaCircle className="dot" />} Not similar to email/username
+                    </PasswordRule>
+                  </PasswordRules>
+                )}
+              </AnimatePresence>
+              
+              <InputField
+                type="password"
+                name="password2"
+                placeholder="Confirm Password"
+                value={form.password2}
+                onChange={handleChange}
+                onFocus={handlePasswordFocus}
+                onBlur={handlePasswordBlur}
+                required
+                disabled={isLoading}
+                whileFocus={{ scale: 1.02 }}
+              />
+              
+              <AnimatePresence>
+                {showPasswordRules && (
+                  <PasswordRule $valid={passwordValidation.matches} style={{ marginBottom: '1.5rem', marginTop: '-0.5rem' }}>
+                    {passwordValidation.matches ? <FaCheckCircle /> : <FaCircle className="dot" />} Passwords match
+                  </PasswordRule>
+                )}
+              </AnimatePresence>
+
+              <SubmitButton
+                type="submit"
+                disabled={isLoading}
+                whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                whileTap={{ scale: isLoading ? 1 : 0.98 }}
+              >
+                {isLoading ? 'Registering...' : 'Create Account'}
+              </SubmitButton>
+            </form>
+            
+            <LoginLink>
+              Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
+            </LoginLink>
+          </RegisterCard>
+        </AuthWrapper>
+      </AppLayout>
     </>
   );
 };
 
 export default Register;
 
-// --- STYLED COMPONENTS ---
-const RegisterContainer = styled.div`
+// ==========================================
+// SAAS LEVEL STYLED COMPONENTS
+// ==========================================
+
+const AuthWrapper = styled.div`
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 20px;
+  justify-content: center;
+  min-height: 65vh; /* Centers the card vertically inside the canvas */
+  width: 100%;
+  padding: 2rem 1rem;
 `;
 
 const RegisterCard = styled(motion.div)`
-  background: white;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(11, 132, 87, 0.12);
+  padding: 3rem 2.5rem;
+  border-radius: 24px;
+  box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.1);
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
   text-align: center;
 `;
 
+const IconWrapper = styled(motion.div)`
+  width: 60px;
+  height: 60px;
+  background: #ECFDF5;
+  color: #0B8457;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem auto;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.1);
+`;
+
 const Title = styled.h1`
-  color: #2c3e50;
-  margin-bottom: 30px;
-  font-size: 28px;
+  color: #0F172A;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+`;
+
+const Subtitle = styled.p`
+  color: #64748B;
+  font-size: 1rem;
+  margin-bottom: 2rem;
 `;
 
 const InputField = styled(motion.input)`
   width: 100%;
-  padding: 15px;
-  margin-bottom: 15px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 16px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.2rem;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  border-radius: 14px;
+  font-size: 1rem;
+  color: #0F172A;
   transition: all 0.3s ease;
   box-sizing: border-box;
 
   &:focus {
     outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-  }
-`;
-
-const SubmitButton = styled(motion.button)`
-  width: 100%;
-  padding: 15px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-  margin-top: 10px;
-
-  &:hover {
-    background: #45a049;
-  }
-
-  &:disabled {
-    background: #cccccc;
-    cursor: not-allowed;
-  }
-`;
-
-const LoginLink = styled.div`
-  margin-top: 20px;
-  color: #666;
-  font-size: 14px;
-
-  a {
-    color: #4CAF50;
-    text-decoration: none;
-    font-weight: 600;
-    margin-left: 5px;
-    transition: color 0.3s ease;
-
-    &:hover {
-      color: #3d8b40;
-      text-decoration: underline;
-    }
+    background: #ffffff;
+    border-color: #0B8457;
+    box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1);
   }
 `;
 
 const PasswordRules = styled(motion.div)`
   text-align: left;
-  margin: 10px 0;
-  font-size: 13px;
-  color: #666;
-  display: ${props => props.$show ? 'block' : 'none'};
+  margin: -0.5rem 0 1.2rem 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 `;
 
-const PasswordRule = styled(motion.div)`
+const PasswordRule = styled.div`
   display: flex;
   align-items: center;
-  margin-bottom: 5px;
-  color: ${props => props.$valid ? '#4CAF50' : '#666'};
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: ${props => props.$valid ? '#059669' : '#94A3B8'};
+  transition: color 0.3s ease;
+  
+  svg { font-size: 1rem; }
+  .dot { font-size: 0.5rem; margin-left: 0.25rem; margin-right: 0.25rem; color: #CBD5E1; }
 `;
 
-const RuleIcon = styled.span`
-  margin-right: 8px;
-  font-size: 16px;
+const SubmitButton = styled(motion.button)`
+  width: 100%;
+  padding: 1.1rem;
+  background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  box-shadow: 0 6px 20px rgba(11, 132, 87, 0.25);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    transform: skewX(-25deg);
+    animation: shimmer 4s infinite;
+  }
+  
+  @keyframes shimmer { 0% { left: -150%; } 20% { left: 200%; } 100% { left: 200%; } }
+
+  &:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(11, 132, 87, 0.4); }
+  &:disabled { opacity: 0.7; cursor: not-allowed; &::after { display: none; } }
+`;
+
+const LoginLink = styled.div`
+  margin-top: 2rem;
+  color: #64748B;
+  font-size: 0.95rem;
+
+  a {
+    color: #0B8457;
+    text-decoration: none;
+    font-weight: 700;
+    margin-left: 5px;
+    transition: color 0.2s ease;
+
+    &:hover { color: #075E3E; text-decoration: underline; }
+  }
 `;

@@ -1,27 +1,35 @@
 // src/components/Layout.js
 import Navbar from './Navbar';
 import { Outlet } from 'react-router-dom';
+import styled from 'styled-components';
 
 const Layout = () => {
   return (
     <>
       <Navbar />
-      <main style={{
-        paddingTop: '1000px',     // Enough top space for sticky navbar
-        minHeight: 'calc(100vh - 1000px)', // Prevent content from being short
-        animation: 'fadeIn 0.5s ease'
-      }}>
+      <MainWrapper>
         <Outlet />
-      </main>
-
-      <style>{`
-        @keyframes fadeIn {
-          0% { opacity: 0; transform: translateY(10px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      </MainWrapper>
     </>
   );
 };
+
+const MainWrapper = styled.main`
+  padding-top: 76px; /* Matches your exact fixed navbar height */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  
+  /* Forces the child component (Home, Products, etc.) to fill remaining space */
+  & > * {
+    flex: 1; 
+  }
+  
+  animation: fadeIn 0.5s ease;
+  @keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+`;
 
 export default Layout;

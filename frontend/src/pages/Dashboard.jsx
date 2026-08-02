@@ -1,9 +1,13 @@
+// src/pages/Dashboard.jsx
 import { useEffect, useState, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { FaBoxOpen, FaStar, FaUserShield, FaTimes } from 'react-icons/fa';
+import { FaBoxOpen, FaStar, FaUserShield, FaTimes, FaExclamationTriangle } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
+import {PageHeader} from '../styles/SharedPageStyles';
+import AppLayout from '../components/AppLayout';
+import ModalPortal from '../components/ModalPortal';
 
 // Import Modular Sections
 import OrdersSection from '../sections/dashboard/OrdersSection';
@@ -14,16 +18,21 @@ import ProfileSection from '../sections/dashboard/ProfileSection';
 const ConfirmationModal = ({ isOpen, onClose, onConfirm }) => (
   <AnimatePresence>
     {isOpen && (
+      <ModalPortal>
       <Overlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <ModalCard initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}>
+        <ModalCard initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}>
+          <ModalIconWrapper>
+            <FaExclamationTriangle size={24} />
+          </ModalIconWrapper>
           <h3>Cancel Order</h3>
           <p>Are you sure you want to cancel this order? This will restore item inventory immediately.</p>
           <ButtonGroup style={{ marginTop: '1.5rem' }}>
-            <ModalSecondaryButton onClick={onClose}>No, Keep it</ModalSecondaryButton>
-            <ModalDangerButton onClick={onConfirm}>Yes, Cancel</ModalDangerButton>
+            <ModalSecondaryButton onClick={onClose} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>No, Keep it</ModalSecondaryButton>
+            <ModalDangerButton onClick={onConfirm} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>Yes, Cancel</ModalDangerButton>
           </ButtonGroup>
         </ModalCard>
       </Overlay>
+      </ModalPortal>
     )}
   </AnimatePresence>
 );
@@ -43,11 +52,12 @@ const ReviewModal = ({ isOpen, onClose, reviewData, onSubmit, isSubmitting }) =>
   if (!isOpen) return null;
 
   return (
+    <ModalPortal>
     <Overlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <ModalCard initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} style={{ maxWidth: '480px' }}>
+      <ModalCard initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} style={{ maxWidth: '480px' }}>
         <CloseBtn onClick={onClose}><FaTimes /></CloseBtn>
         <h3>{reviewData.isEditing ? 'Edit Your Review' : 'Leave a Review'}</h3>
-        <p style={{ color: '#2e7d32', fontWeight: 'bold', marginBottom: '0.5rem' }}>{reviewData.productName}</p>
+        <p style={{ color: '#0B8457', fontWeight: '700', marginBottom: '1.2rem' }}>{reviewData.productName}</p>
         
         <Stars>
           {[...Array(5)].map((_, i) => {
@@ -55,7 +65,7 @@ const ReviewModal = ({ isOpen, onClose, reviewData, onSubmit, isSubmitting }) =>
             return (
               <label key={i}>
                 <input type="radio" name="rating" value={starValue} onClick={() => setRating(starValue)} style={{ display: 'none' }} />
-                <FaStar size={32} color={starValue <= (hover || rating) ? '#ffc107' : '#e4e5e9'} onMouseEnter={() => setHover(starValue)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer', transition: 'color 200ms' }} />
+                <FaStar size={32} color={starValue <= (hover || rating) ? '#F59E0B' : '#E2E8F0'} onMouseEnter={() => setHover(starValue)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer', transition: 'color 200ms' }} />
               </label>
             );
           })}
@@ -77,6 +87,7 @@ const ReviewModal = ({ isOpen, onClose, reviewData, onSubmit, isSubmitting }) =>
         </ModalContentWrapper>
       </ModalCard>
     </Overlay>
+    </ModalPortal>
   );
 };
 
@@ -84,7 +95,6 @@ const Dashboard = () => {
   const { axiosInstance, user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('orders'); 
 
-  // Segregated States
   const [orders, setOrders] = useState([]);
   const [orderPage, setOrderPage] = useState(1);
   const [totalOrderPages, setTotalOrderPages] = useState(1);
@@ -103,7 +113,6 @@ const Dashboard = () => {
   const [reviewModalData, setReviewModalData] = useState({ isOpen: false });
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  // Fetch Addresses
   useEffect(() => {
     const fetchAddresses = async () => {
       try {
@@ -114,7 +123,6 @@ const Dashboard = () => {
     fetchAddresses();
   }, [axiosInstance]);
 
-  // Fetch Orders
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
     try {
@@ -123,10 +131,9 @@ const Dashboard = () => {
       if (res.data.count) setTotalOrderPages(Math.ceil(res.data.count / 12));
     } catch (error) { toast.error('Failed to load orders'); } 
     finally { setIsLoadingOrders(false); }
-  };
+  };// eslint-disable-next-line
   useEffect(() => { fetchOrders(); }, [orderPage, axiosInstance]);
 
-  // Fetch Reviews
   const fetchReviews = async () => {
     setIsLoadingReviews(true);
     try {
@@ -135,8 +142,8 @@ const Dashboard = () => {
       if (res.data.count) setTotalReviewPages(Math.ceil(res.data.count / 12));
     } catch (error) { toast.error('Failed to load reviews'); } 
     finally { setIsLoadingReviews(false); }
-  };
-  useEffect(() => { fetchReviews(); }, [reviewPage, axiosInstance, user.id]);
+  };// eslint-disable-next-line
+  useEffect(() => { fetchReviews(); }, [reviewPage, axiosInstance, user?.id]);
 
   const executeCancelOrder = async () => {
     const orderId = orderToCancel;
@@ -175,11 +182,13 @@ const Dashboard = () => {
   };
 
   return (
-    <DashboardContainer>
+    <AppLayout>
+      <AmbientBackground />
       <ConfirmationModal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} onConfirm={executeCancelOrder} />
       
       <AnimatePresence>
         {reviewModalData.isOpen && (
+          <ModalPortal>
           <ReviewModal 
             isOpen={reviewModalData.isOpen} 
             onClose={() => setReviewModalData({ isOpen: false })} 
@@ -187,66 +196,179 @@ const Dashboard = () => {
             onSubmit={handleReviewSubmit} 
             isSubmitting={isSubmittingReview} 
           />
+          </ModalPortal>
         )}
       </AnimatePresence>
       
-      <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>My Dashboard</motion.h1>
+      <DashboardContainer>
+        <PageHeader initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <h1>My Dashboard</h1>
+          <p>Manage your orders, product reviews, and account security.</p>
+        </PageHeader>
 
-      <TabBar>
-        <Tab $active={activeTab === 'orders'} onClick={() => setActiveTab('orders')}><FaBoxOpen /> Orders</Tab>
-        <Tab $active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')}><FaStar /> Reviews</Tab>
-        <Tab $active={activeTab === 'profile'} onClick={() => setActiveTab('profile')}><FaUserShield /> Profile Settings</Tab>
-      </TabBar>
+        <TabBar>
+          <Tab $active={activeTab === 'orders'} onClick={() => setActiveTab('orders')} whileTap={{ scale: 0.97 }}>
+            <FaBoxOpen /> Orders
+          </Tab>
+          <Tab $active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')} whileTap={{ scale: 0.97 }}>
+            <FaStar /> Reviews
+          </Tab>
+          <Tab $active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} whileTap={{ scale: 0.97 }}>
+            <FaUserShield /> Profile Settings
+          </Tab>
+        </TabBar>
 
-      {/* TAB 1: ORDERS */}
-      {activeTab === 'orders' && (
-        <OrdersSection 
-          orders={orders}
-          isLoadingOrders={isLoadingOrders}
-          orderPage={orderPage}
-          totalOrderPages={totalOrderPages}
-          setOrderPage={setOrderPage}
-          userReviews={userReviews}
-          openReviewModal={(productInfo, review) => setReviewModalData({ isOpen: true, productId: productInfo.product, productName: productInfo.name || productInfo.product_name, isEditing: !!review, reviewId: review?.id, rating: review?.rating, comment: review?.comment })}
-          onCancelOrderClick={(orderId) => { setOrderToCancel(orderId); setIsCancelModalOpen(true); }}
-        />
-      )}
+        <ContentArea>
+          {activeTab === 'orders' && (
+            <OrdersSection 
+              orders={orders}
+              isLoadingOrders={isLoadingOrders}
+              orderPage={orderPage}
+              totalOrderPages={totalOrderPages}
+              setOrderPage={setOrderPage}
+              userReviews={userReviews}
+              openReviewModal={(productInfo, review) => setReviewModalData({ isOpen: true, productId: productInfo.product, productName: productInfo.name || productInfo.product_name, isEditing: !!review, reviewId: review?.id, rating: review?.rating, comment: review?.comment })}
+              onCancelOrderClick={(orderId) => { setOrderToCancel(orderId); setIsCancelModalOpen(true); }}
+            />
+          )}
 
-      {/* TAB 2: REVIEWS */}
-      {activeTab === 'reviews' && (
-        <ReviewsSection 
-          userReviews={userReviews}
-          isLoadingReviews={isLoadingReviews}
-          reviewPage={reviewPage}
-          totalReviewPages={totalReviewPages}
-          setReviewPage={setReviewPage}
-          openReviewModal={(productInfo, review) => setReviewModalData({ isOpen: true, productId: productInfo.product, productName: productInfo.product_name, isEditing: true, reviewId: review?.id, rating: review?.rating, comment: review?.comment })}
-          onDeleteReview={deleteReview}
-        />
-      )}
+          {activeTab === 'reviews' && (
+            <ReviewsSection 
+              userReviews={userReviews}
+              isLoadingReviews={isLoadingReviews}
+              reviewPage={reviewPage}
+              totalReviewPages={totalReviewPages}
+              setReviewPage={setReviewPage}
+              openReviewModal={(productInfo, review) => setReviewModalData({ isOpen: true, productId: productInfo.product, productName: productInfo.product_name, isEditing: true, reviewId: review?.id, rating: review?.rating, comment: review?.comment })}
+              onDeleteReview={deleteReview}
+            />
+          )}
 
-      {/* TAB 3: PROFILE SETTINGS */}
-      {activeTab === 'profile' && (
-        <ProfileSection 
-          addresses={addresses} 
-          setAddresses={setAddresses} 
-        />
-      )}
-    </DashboardContainer>
+          {activeTab === 'profile' && (
+            <ProfileSection 
+              addresses={addresses} 
+              setAddresses={setAddresses} 
+            />
+          )}
+        </ContentArea>
+      </DashboardContainer>
+    </AppLayout>
   );
 };
 
-const DashboardContainer = styled.div` padding: 7rem 2rem 2rem 2rem; max-width: 1000px; margin: 0 auto; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%); @media (max-width: 768px) { padding: 6rem 1rem 1rem 1rem; }`;
-const TabBar = styled.div` display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 1rem; overflow-x: auto; scrollbar-width: none; `;
-const Tab = styled.button` display: flex; align-items: center; gap: 0.5rem; background: ${props => props.$active ? '#2e7d32' : 'transparent'}; color: ${props => props.$active ? 'white' : '#616161'}; border: none; padding: 0.8rem 1.5rem; border-radius: 30px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.3s; white-space: nowrap; &:hover { background: ${props => props.$active ? '#1b5e20' : '#e0e0e0'}; }`;
-const Overlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; backdrop-filter: blur(4px);`;
-const ModalCard = styled(motion.div)` position: relative; background: white; padding: 2.5rem; border-radius: 20px; width: 100%; max-width: 440px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); h3 { margin: 0 0 0.5rem 0; color: #0f172a; } p { color: #64748b; margin-bottom: 0; font-size: 0.95rem; }`;
-const CloseBtn = styled.button` position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.2rem; color: #94a3b8; cursor: pointer; &:hover { color: #0f172a; } `;
-const ModalContentWrapper = styled.div` display: flex; flex-direction: column; gap: 1.2rem; width: 100%; margin-top: 1.2rem; box-sizing: border-box; textarea { width: 100%; height: 110px; padding: 0.9rem 1rem; border-radius: 10px; border: 2px solid #e2e8f0; font-size: 1rem; outline: none; font-family: inherit; box-sizing: border-box; resize: none; transition: 0.2s; &:focus { border-color: #2e7d32; } } `;
-const ButtonGroup = styled.div` display: flex; gap: 1rem; width: 100%; justify-content: center; box-sizing: border-box; `;
-const Stars = styled.div` display: flex; justify-content: center; margin: 1rem 0; gap: 4px; `;
-const ModalPrimaryButton = styled.button` flex: 1; padding: 0.9rem 0; border: none; border-radius: 10px; cursor: pointer; background: #2e7d32; color: white; font-weight: bold; font-size: 1rem; box-sizing: border-box; &:hover:not(:disabled) { filter: brightness(1.1); } &:disabled { opacity: 0.6; cursor: not-allowed; } `;
-const ModalDangerButton = styled.button` flex: 1; padding: 0.9rem 0; border: none; border-radius: 10px; cursor: pointer; background: #d32f2f; color: white; font-weight: bold; font-size: 1rem; box-sizing: border-box; &:hover { background: #b71c1c; } `;
-const ModalSecondaryButton = styled.button` flex: 1; padding: 0.9rem 0; border: none; border-radius: 10px; cursor: pointer; background: #f1f5f9; color: #475569; font-weight: bold; font-size: 1rem; box-sizing: border-box; &:hover { background: #e2e8f0; } `;
-
 export default Dashboard;
+
+// ==========================================
+// SAAS LEVEL STYLED COMPONENTS
+// ==========================================
+
+const AmbientBackground = styled.div`
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1400px;
+  height: 600px;
+  background: radial-gradient(circle at 50% 10%, rgba(11, 132, 87, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+`;
+
+const DashboardContainer = styled.div`
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  
+  @media (max-width: 768px) {
+    padding: 0 1rem;
+  }
+`;
+
+const TabBar = styled.div`
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 2.5rem;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 0.5rem;
+  border-radius: 50px;
+  border: 1px solid rgba(11, 132, 87, 0.12);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+  width: fit-content;
+  margin-inline: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+`;
+
+const Tab = styled(motion.button)`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: ${props => props.$active ? 'linear-gradient(135deg, #0B8457 0%, #075E3E 100%)' : 'transparent'};
+  color: ${props => props.$active ? '#ffffff' : '#64748B'};
+  border: none;
+  padding: 0.7rem 1.6rem;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: color 0.2s;
+  white-space: nowrap;
+  box-shadow: ${props => props.$active ? '0 4px 14px rgba(11, 132, 87, 0.25)' : 'none'};
+
+  &:hover {
+    color: ${props => props.$active ? '#ffffff' : '#0F172A'};
+  }
+`;
+
+const ContentArea = styled.div`
+  min-height: 400px;
+`;
+
+// Shared Modals
+const Overlay = styled(motion.div)`
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+`;
+
+const ModalCard = styled(motion.div)`
+  position: relative; background: #ffffff; padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid rgba(11, 132, 87, 0.1);
+  h3 { margin: 0 0 0.5rem 0; color: #0F172A; font-size: 1.5rem; font-weight: 800; } 
+  p { color: #64748B; margin-bottom: 0; font-size: 1rem; line-height: 1.5; }
+`;
+
+const ModalIconWrapper = styled.div`
+  width: 60px; height: 60px; background: #FEF2F2; color: #EF4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;
+`;
+
+const CloseBtn = styled.button`
+  position: absolute; top: 1.2rem; right: 1.2rem; background: none; border: none; font-size: 1.2rem; color: #94A3B8; cursor: pointer; transition: color 0.2s;
+  &:hover { color: #0F172A; } 
+`;
+
+const ModalContentWrapper = styled.div`
+  display: flex; flex-direction: column; gap: 1.2rem; width: 100%; margin-top: 1.5rem; box-sizing: border-box; 
+  textarea { width: 100%; height: 110px; padding: 0.9rem 1rem; border-radius: 12px; border: 1px solid #E2E8F0; font-size: 1rem; outline: none; font-family: inherit; box-sizing: border-box; resize: none; transition: all 0.2s; color: #0F172A; background: #F8FAFC; &:focus { border-color: #0B8457; background: #ffffff; box-shadow: 0 0 0 3px rgba(11, 132, 87, 0.1); } } 
+`;
+
+const ButtonGroup = styled.div` display: flex; gap: 1rem; width: 100%; justify-content: center; box-sizing: border-box; `;
+const Stars = styled.div` display: flex; justify-content: center; margin: 0.5rem 0; gap: 6px; `;
+
+const ModalPrimaryButton = styled(motion.button)`
+  flex: 1; padding: 0.9rem 0; border: none; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%); color: white; font-weight: 700; font-size: 1rem; box-shadow: 0 4px 12px rgba(11, 132, 87, 0.25); box-sizing: border-box; 
+  &:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(11, 132, 87, 0.35); } 
+  &:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; } 
+`;
+
+const ModalDangerButton = styled(motion.button)`
+  flex: 1; padding: 0.9rem 0; border: none; border-radius: 12px; cursor: pointer; background: #EF4444; color: white; font-weight: 700; font-size: 1rem; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); box-sizing: border-box; 
+  &:hover { background: #DC2626; box-shadow: 0 6px 16px rgba(239, 68, 68, 0.3); } 
+`;
+
+const ModalSecondaryButton = styled(motion.button)`
+  flex: 1; padding: 0.9rem 0; border: 1px solid #E2E8F0; border-radius: 12px; cursor: pointer; background: #ffffff; color: #475569; font-weight: 700; font-size: 1rem; box-sizing: border-box; 
+  &:hover { background: #F8FAFC; color: #0F172A; } 
+`;

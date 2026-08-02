@@ -1,9 +1,11 @@
+// src/sections/OrdersSection.jsx
 import { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import AuthContext from '../context/AuthContext';
 import { toast } from "react-hot-toast";
 import { FaTimes, FaClock, FaShippingFast, FaCheckCircle, FaTimesCircle, FaEdit } from 'react-icons/fa';
+import ModalPortal from '../components/ModalPortal';
 
 const OrdersSection = () => {
   const { axiosInstance } = useContext(AuthContext);
@@ -17,7 +19,6 @@ const OrdersSection = () => {
 
   const fetchOrdersAndProducts = async () => {
     try {
-      // 🚨 Pagination applied ONLY to orders. Users and Products must fetch all to map names properly.
       const [ordersRes, usersRes, productsRes] = await Promise.all([
         axiosInstance.get(`/api/orders/?page=${currentPage}`), 
         axiosInstance.get('/api/users/?page_size=1000'),
@@ -47,7 +48,7 @@ const OrdersSection = () => {
   useEffect(() => {
     fetchOrdersAndProducts();
     // eslint-disable-next-line
-  }, [currentPage]); // Re-runs instantly when page changes
+  }, [currentPage]); 
 
   const handleStatusChange = async (orderId, newStatus) => {
     if (newStatus === 'cancelled' && !window.confirm('Cancel this order? This will restore the items to the inventory.')) return;
@@ -61,11 +62,11 @@ const OrdersSection = () => {
 
   const getStatusConfig = (status) => {
     switch (status) {
-      case 'pending': return { bg: '#fef9c3', fg: '#713f12', border: '#eab308', icon: <FaClock />, label: 'Pending' };
-      case 'shipped': return { bg: '#dbeafe', fg: '#1e40af', border: '#3b82f6', icon: <FaShippingFast />, label: 'Shipped' };
-      case 'delivered': return { bg: '#dcfce7', fg: '#166534', border: '#22c55e', icon: <FaCheckCircle />, label: 'Delivered' };
-      case 'cancelled': return { bg: '#fee2e2', fg: '#991b1b', border: '#ef4444', icon: <FaTimesCircle />, label: 'Cancelled' };
-      default: return { bg: '#f3f4f6', fg: '#374151', border: '#9ca3af', icon: <FaClock />, label: 'Unknown' };
+      case 'pending': return { bg: '#FEF3C7', fg: '#B45309', border: '#F59E0B', icon: <FaClock />, label: 'Pending' };
+      case 'shipped': return { bg: '#DBEAFE', fg: '#1D4ED8', border: '#3B82F6', icon: <FaShippingFast />, label: 'Shipped' };
+      case 'delivered': return { bg: '#ECFDF5', fg: '#047857', border: '#10B981', icon: <FaCheckCircle />, label: 'Delivered' };
+      case 'cancelled': return { bg: '#FEF2F2', fg: '#B91C1C', border: '#EF4444', icon: <FaTimesCircle />, label: 'Cancelled' };
+      default: return { bg: '#F1F5F9', fg: '#334155', border: '#94A3B8', icon: <FaClock />, label: 'Unknown' };
     }
   };
 
@@ -79,17 +80,17 @@ const OrdersSection = () => {
           const isLocked = o.status === 'cancelled' || o.status === 'delivered';
 
           return (
-            <ListItem key={o.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <ListItem key={o.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -2 }}>
               <OrderDetails>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
-                    <div style={{ fontSize: '1.2rem' }}><strong>Order #{o.id}</strong></div>
-                    <div style={{ color: '#555', marginTop: '0.3rem' }}>Customer: <strong>{o.username}</strong></div>
-                    <div style={{ color: '#2e7d32', fontWeight: 'bold', marginTop: '0.3rem', fontSize: '1.1rem' }}>Total: ${Number(o.total_price).toFixed(2)}</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0F172A' }}>Order #{o.id}</div>
+                    <div style={{ color: '#64748B', marginTop: '0.3rem', fontSize: '0.95rem' }}>Customer: <strong style={{ color: '#0F172A' }}>{o.username}</strong></div>
+                    <div style={{ color: '#0B8457', fontWeight: '900', marginTop: '0.4rem', fontSize: '1.2rem' }}>Total: ${Number(o.total_price).toFixed(2)}</div>
                   </div>
                   <StatusTriggerButton 
                     $bg={config.bg} $fg={config.fg} onClick={() => setActiveOrder(o)}
-                    disabled={isLocked} whileHover={!isLocked ? { scale: 1.05 } : {}} whileTap={!isLocked ? { scale: 0.95 } : {}}
+                    disabled={isLocked} whileHover={!isLocked ? { scale: 1.02 } : {}} whileTap={!isLocked ? { scale: 0.98 } : {}}
                   >
                     {config.icon} {config.label} {!isLocked && <FaEdit style={{ marginLeft: '4px', fontSize: '0.8rem' }}/>}
                   </StatusTriggerButton>
@@ -111,10 +112,9 @@ const OrdersSection = () => {
         })}
       </ul>
 
-      {/* Pagination Controls */}
       {totalPages > 1 && (
         <PaginationWrapper>
-          <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Previous</PageButton>
+          <PageButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>&larr; Prev</PageButton>
           <PageInfo>Page {currentPage} of {totalPages}</PageInfo>
           <PageButton onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next &rarr;</PageButton>
         </PaginationWrapper>
@@ -123,8 +123,9 @@ const OrdersSection = () => {
       {/* Modals */}
       <AnimatePresence>
         {activeOrder && (
+          <ModalPortal>
           <ModalOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveOrder(null)}>
-            <ModalCard initial={{ scale: 0.8, opacity: 0, y: 50 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.8, opacity: 0, y: 50 }} onClick={e => e.stopPropagation()}>
+            <ModalCard initial={{ scale: 0.9, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 10 }} onClick={e => e.stopPropagation()}>
               <CloseButton onClick={() => setActiveOrder(null)}><FaTimes /></CloseButton>
               <ModalTitle>Update Order #{activeOrder.id}</ModalTitle>
               <StatusOptionList>
@@ -140,6 +141,7 @@ const OrdersSection = () => {
               </StatusOptionList>
             </ModalCard>
           </ModalOverlay>
+          </ModalPortal>
         )}
       </AnimatePresence>
     </motion.div>
@@ -149,22 +151,22 @@ const OrdersSection = () => {
 export default OrdersSection;
 
 // STYLED COMPONENTS
-const SectionTitle = styled.h2` color: #2e7d32; margin-bottom: 1.5rem; font-size: 1.5rem; `;
-const ListItem = styled(motion.li)` background: #ffffff; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1.5rem; box-shadow: 0 4px 12px rgba(46, 125, 50, 0.05); border: 1px solid #e8f5e9; `;
+const SectionTitle = styled.h2` color: #0F172A; margin-bottom: 1.5rem; font-size: 1.5rem; font-weight: 800; `;
+const ListItem = styled(motion.li)` background: #ffffff; padding: 1.8rem; border-radius: 20px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid rgba(11, 132, 87, 0.08); `;
 const OrderDetails = styled.div` flex: 1; width: 100%; `;
-const StatusTriggerButton = styled(motion.button)` display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; text-transform: uppercase; border: 2px solid transparent; cursor: pointer; background-color: ${props => props.$bg}; color: ${props => props.$fg}; min-width: 160px; justify-content: center; &:hover:not(:disabled) { filter: brightness(0.95); box-shadow: 0 4px 8px rgba(0,0,0,0.1); } &:disabled { cursor: not-allowed; opacity: 0.7; } `;
-const ItemsContainer = styled.div` margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #eee; display: flex; flex-direction: column; gap: 1rem; `;
-const ProductRow = styled.div` display: flex; align-items: center; gap: 1rem; background: #f9fbf9; padding: 0.8rem; border-radius: 8px; border: 1px solid #e0e0e0; `;
-const ProductImage = styled.div` width: 60px; height: 60px; background: white; border-radius: 8px; padding: 4px; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; img { max-width: 100%; max-height: 100%; object-fit: contain; } span { font-size: 0.7rem; color: #aaa; } `;
-const ProductInfo = styled.div` display: flex; flex-direction: column; gap: 0.2rem; .name { font-weight: 600; color: #333; } .details { font-size: 0.9rem; color: #666; } `;
-// Pagination Styles
-const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2rem; padding-bottom: 1rem; `;
-const PageButton = styled.button` padding: 0.6rem 1.2rem; border-radius: 8px; border: none; font-weight: bold; background: ${props => props.disabled ? '#e0e0e0' : '#4caf50'}; color: ${props => props.disabled ? '#9e9e9e' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; &:hover:not(:disabled) { background: #388e3c; } `;
-const PageInfo = styled.span` font-weight: bold; color: #555; background: #f5f5f5; padding: 0.6rem 1rem; border-radius: 8px; `;
-// Modal Styles
-const ModalOverlay = styled(motion.div)` position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem; `;
-const ModalCard = styled(motion.div)` background: white; width: 100%; max-width: 400px; border-radius: 20px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); position: relative; `;
-const CloseButton = styled.button` position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; font-size: 1.2rem; color: #999; cursor: pointer; &:hover { color: #333; } `;
-const ModalTitle = styled.h3` margin: 0 0 1.5rem 0; color: #2c3e50; text-align: center; font-size: 1.3rem; `;
+const StatusTriggerButton = styled(motion.button)` display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; border-radius: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid ${props => props.$border || 'transparent'}; cursor: pointer; background-color: ${props => props.$bg}; color: ${props => props.$fg}; min-width: 150px; justify-content: center; font-size: 0.9rem; &:hover:not(:disabled) { filter: brightness(0.95); } &:disabled { cursor: not-allowed; opacity: 0.7; } `;
+const ItemsContainer = styled.div` margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px dashed #E2E8F0; display: flex; flex-direction: column; gap: 1rem; `;
+const ProductRow = styled.div` display: flex; align-items: center; gap: 1rem; background: #F8FAFC; padding: 0.8rem; border-radius: 12px; border: 1px solid #F1F5F9; `;
+const ProductImage = styled.div` width: 60px; height: 60px; background: white; border-radius: 10px; padding: 4px; border: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: center; img { max-width: 100%; max-height: 100%; object-fit: contain; mix-blend-mode: multiply; } span { font-size: 0.7rem; color: #94A3B8; } `;
+const ProductInfo = styled.div` display: flex; flex-direction: column; gap: 0.2rem; .name { font-weight: 700; color: #0F172A; } .details { font-size: 0.9rem; color: #64748B; font-weight: 500; } `;
+
+const PaginationWrapper = styled.div` display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 3rem; padding-bottom: 1rem; `;
+const PageButton = styled.button` padding: 0.6rem 1.4rem; border-radius: 50px; border: none; font-weight: 700; background: ${props => props.disabled ? '#F1F5F9' : '#0B8457'}; color: ${props => props.disabled ? '#94A3B8' : 'white'}; cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; transition: 0.2s; box-shadow: ${props => props.disabled ? 'none' : '0 4px 10px rgba(11, 132, 87, 0.2)'}; &:hover:not(:disabled) { background: #086341; transform: translateY(-1px); } `;
+const PageInfo = styled.span` font-weight: 700; color: #334155; font-size: 0.95rem; background: #ffffff; padding: 0.6rem 1.2rem; border-radius: 50px; border: 1px solid #E2E8F0; `;
+
+const ModalOverlay = styled(motion.div)` position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem; `;
+const ModalCard = styled(motion.div)` background: white; width: 100%; max-width: 420px; border-radius: 24px; padding: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); position: relative; border: 1px solid rgba(11, 132, 87, 0.1); `;
+const CloseButton = styled.button` position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; font-size: 1.2rem; color: #94A3B8; cursor: pointer; &:hover { color: #0F172A; } `;
+const ModalTitle = styled.h3` margin: 0 0 1.5rem 0; color: #0F172A; text-align: center; font-size: 1.4rem; font-weight: 800; `;
 const StatusOptionList = styled.div` display: flex; flex-direction: column; gap: 0.8rem; `;
-const StatusOptionBtn = styled(motion.button)` display: flex; align-items: center; gap: 1rem; width: 100%; padding: 1rem 1.5rem; border: 2px solid ${props => props.$active ? props.$borderColor : 'transparent'}; border-radius: 12px; background-color: ${props => props.$bg}; color: ${props => props.$fg}; font-size: 1.1rem; font-weight: 600; cursor: pointer; &:hover { filter: brightness(0.95); } `;
+const StatusOptionBtn = styled(motion.button)` display: flex; align-items: center; gap: 1rem; width: 100%; padding: 1rem 1.2rem; border: 2px solid ${props => props.$active ? props.$borderColor : 'transparent'}; border-radius: 14px; background-color: ${props => props.$bg}; color: ${props => props.$fg}; font-size: 1.05rem; font-weight: 700; cursor: pointer; &:hover { filter: brightness(0.95); } `;
