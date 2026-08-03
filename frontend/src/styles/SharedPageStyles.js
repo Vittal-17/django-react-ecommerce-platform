@@ -69,3 +69,73 @@ export const EmptyStateCard = styled(motion.div)`
     &:hover { background: #086341; }
   }
 `;
+
+export const GlowingPageContainer = styled.div`
+  position: relative;
+  z-index: 1;
+  /* 🚀 Dynamic width so it adapts perfectly to any page layout */
+  max-width: ${props => props.$maxWidth || '1500px'}; 
+  margin: 0 auto;
+  padding: 0 2.5rem;
+  box-sizing: border-box;
+
+  /* 🔥 THE 12-ORB SCATTERED AMBIENT ENGINE */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: -1;
+    pointer-events: none;
+    filter: blur(65px); 
+
+    background: 
+      /* --- TOP CLUSTER --- */
+      radial-gradient(circle at -2% 2%, rgba(11, 132, 87, 0.45) 0%, transparent 550px),
+      radial-gradient(circle at 102% 8%, rgba(16, 185, 129, 0.45) 0%, transparent 600px),
+      radial-gradient(circle at 25% 12%, rgba(11, 132, 87, 0.20) 0%, transparent 400px),
+      
+      /* --- UPPER-MID CLUSTER --- */
+      radial-gradient(circle at 85% 25%, rgba(16, 185, 129, 0.25) 0%, transparent 500px),
+      radial-gradient(circle at -5% 35%, rgba(16, 185, 129, 0.40) 0%, transparent 600px),
+      radial-gradient(circle at 40% 42%, rgba(11, 132, 87, 0.15) 0%, transparent 450px),
+      
+      /* --- LOWER-MID CLUSTER --- */
+      radial-gradient(circle at 105% 55%, rgba(11, 132, 87, 0.35) 0%, transparent 550px),
+      radial-gradient(circle at 15% 65%, rgba(16, 185, 129, 0.20) 0%, transparent 400px),
+      radial-gradient(circle at 90% 72%, rgba(11, 132, 87, 0.25) 0%, transparent 500px),
+      
+      /* --- BOTTOM CLUSTER --- */
+      radial-gradient(circle at -2% 85%, rgba(11, 132, 87, 0.45) 0%, transparent 600px),
+      radial-gradient(circle at 102% 95%, rgba(16, 185, 129, 0.45) 0%, transparent 550px),
+      radial-gradient(circle at 35% 92%, rgba(16, 185, 129, 0.20) 0%, transparent 450px);
+      
+    background-repeat: no-repeat;
+  }
+
+  /* 🚀 BULLETPROOF MOBILE SCALING */
+  @media (max-width: 768px) {
+    padding: 0 1rem;
+    margin-top: 1rem; 
+    
+    &::before {
+      filter: blur(50px);
+      
+      background: 
+        radial-gradient(circle at -15% 2%, rgba(11, 132, 87, 0.40) 0%, transparent 300px),
+        radial-gradient(circle at 115% 8%, rgba(16, 185, 129, 0.40) 0%, transparent 350px),
+        radial-gradient(circle at 25% 12%, rgba(11, 132, 87, 0.15) 0%, transparent 200px),
+        
+        radial-gradient(circle at 85% 25%, rgba(16, 185, 129, 0.15) 0%, transparent 250px),
+        radial-gradient(circle at -10% 35%, rgba(16, 185, 129, 0.35) 0%, transparent 300px),
+        radial-gradient(circle at 40% 42%, rgba(11, 132, 87, 0.10) 0%, transparent 200px),
+        
+        radial-gradient(circle at 110% 55%, rgba(11, 132, 87, 0.30) 0%, transparent 300px),
+        radial-gradient(circle at 15% 65%, rgba(16, 185, 129, 0.15) 0%, transparent 250px),
+        radial-gradient(circle at 90% 72%, rgba(11, 132, 87, 0.15) 0%, transparent 250px),
+        
+        radial-gradient(circle at -10% 85%, rgba(11, 132, 87, 0.40) 0%, transparent 350px),
+        radial-gradient(circle at 110% 95%, rgba(16, 185, 129, 0.40) 0%, transparent 300px),
+        radial-gradient(circle at 35% 92%, rgba(16, 185, 129, 0.15) 0%, transparent 200px);
+    }
+  }
+`;

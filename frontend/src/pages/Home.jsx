@@ -99,31 +99,48 @@ const GlassCard = styled(motion.div)`
   width: 90%;
   max-width: 850px;
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
-  /* Force hardware acceleration to prevent repaint glitches */
   will-change: transform, opacity;
+  box-sizing: border-box;
+
+  /* 🚀 MOBILE FIX: Reclaim horizontal screen real estate */
+  @media (max-width: 768px) {
+    padding: 2.5rem 1.25rem;
+    width: 92%;
+    border-radius: 20px;
+  }
 `;
 
 const HeroTitle = styled(motion.h1)`
-  font-size: clamp(3rem, 6vw, 4.5rem);
+  /* 🚀 MOBILE FIX: Lowered the minimum font size from 3rem to 2.2rem so it scales down on small phones */
+  font-size: clamp(2.2rem, 8vw, 4.5rem);
   font-weight: 900;
   color: #0B8457; 
   margin-bottom: 1.2rem;
   letter-spacing: -1px;
-  /* Isolated stacking context to prevent blur bleed */
   position: relative;
   z-index: 2;
+  word-wrap: break-word; /* Prevents long words from breaking the container */
+  
+  @media (max-width: 768px) {
+    margin-bottom: 0.8rem;
+  }
 `;
 
 const Subtitle = styled(motion.p)`
-  font-size: clamp(1rem, 2vw, 1.15rem);
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
   color: #1a1a1a;
   margin-bottom: 2.5rem;
   font-weight: 600;
   line-height: 1.6;
   max-width: 600px;
-  /* Isolated stacking context to prevent blur bleed */
   position: relative;
   z-index: 2;
+
+  /* 🚀 MOBILE FIX: Slightly tighten margins for smaller screens */
+  @media (max-width: 768px) {
+    margin-bottom: 2rem;
+    padding: 0 0.5rem;
+  }
 `;
 
 const CTAButton = styled(motion.button)`

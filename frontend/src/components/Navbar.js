@@ -196,25 +196,35 @@ const CustomLink = ({ to, label, icon, currentPath }) => {
 // 🚀 UPGRADED FLOATING NAVBAR
 const NavContainer = styled(motion.div)`
   position: fixed;
-  top: 20px; /* Drops it below the top edge */
+  top: 16px;
   left: 0;
   right: 0;
   margin: 0 auto;
-  width: calc(100% - 3rem); /* Matches the padding of the AppLayout */
-  max-width: 1450px; /* Aligns perfectly with your internal canvas */
-  height: 76px; 
-  border-radius: 32px; /* Smooth rounded pill edges */
+  width: calc(100% - 2.5rem);
+  max-width: 1450px;
+  min-height: 68px; /* Uses min-height instead of a locked height to prevent clipping */
+  border-radius: 24px;
   box-sizing: border-box;
   z-index: 1000;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   
-  background: ${props => props.$isScrolled ? 'rgba(209, 250, 229, 0.92)' : 'rgba(220, 252, 231, 0.85)'};
+  background: ${props => props.$isScrolled ? 'rgba(209, 250, 229, 0.95)' : 'rgba(220, 252, 231, 0.9)'};
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(11, 132, 87, 0.22); /* Full border wrap instead of just bottom */
+  border: 1px solid rgba(11, 132, 87, 0.22);
   box-shadow: ${props => props.$isScrolled ? '0 15px 40px -10px rgba(11, 132, 87, 0.25)' : '0 10px 30px rgba(11, 132, 87, 0.1)'};
   transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+
+  /* 🚀 Mobile Layout Fixes */
+  @media (max-width: 768px) {
+    top: 10px;
+    width: calc(100% - 1rem); /* Takes up more width on mobile screens to give content room */
+    min-height: 58px;
+    border-radius: 18px;
+    padding: 0 0.75rem; /* Safe internal breathing room */
+  }
 `;
 
 const NavContent = styled.div`
@@ -305,26 +315,45 @@ const UserButton = styled(motion.button)`
   border: 1px solid ${props => props.$isOpen ? 'rgba(11, 132, 87, 0.2)' : 'transparent'};
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  font-size: 0.95rem;
+  gap: 0.5rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #0B8457;
   cursor: pointer;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 50px;
   transition: all 0.2s ease;
 
-  .user-icon { font-size: 1.1rem; }
+  .user-icon { font-size: 1.05rem; }
 
   &:hover { background: rgba(11, 132, 87, 0.08); }
+
+  /* 🚀 Shrink padding and gaps on mobile to prevent overflow */
+  @media (max-width: 768px) {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+    gap: 0.3rem;
+  }
 `;
 
 const UsernameText = styled.span`
-  max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  @media (min-width: 480px) { max-width: 120px; }
+  max-width: 100px; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis;
+
+  /* 🚀 Completely hide the username text on tiny screens to save horizontal space for the hamburger menu */
+  @media (max-width: 480px) {
+    display: none; 
+  }
+
+  @media (min-width: 481px) and (max-width: 768px) {
+    max-width: 75px;
+  }
 `;
 
 const DropdownMenu = styled(motion.div)`
+  /* 🚀 DESKTOP: Anchors perfectly to the bottom-right of the user button */
   position: absolute;
   right: 0;
   top: calc(100% + 1rem);
@@ -340,12 +369,39 @@ const DropdownMenu = styled(motion.div)`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  box-sizing: border-box;
+
+  /* 🚀 MOBILE: Detaches from the button and centers flawlessly on the screen */
+  @media (max-width: 768px) {
+    position: fixed; 
+    top: 85px; /* Drops it cleanly just below your mobile navbar */
+    left: 0;
+    right: 0;
+    margin: 0 auto; /* This magic combo perfectly centers fixed elements */
+    width: 92vw; /* Takes up a beautiful, symmetrical 92% of the phone screen */
+    max-width: 340px; 
+  }
 `;
 
 const UserInfo = styled.div` display: flex; flex-direction: column; gap: 0.8rem; padding-bottom: 0.5rem; `;
 const InfoItem = styled.div`
-  display: flex; align-items: center; gap: 0.8rem; color: #4B5563; font-size: 0.95rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  svg { color: #0B8457; min-width: 16px; }
+  display: flex; 
+  align-items: center; 
+  gap: 0.8rem; 
+  color: #4B5563; 
+  font-size: 0.90rem; 
+  font-weight: 500; 
+  
+  /* 🚀 Fix long email overflow clipping inside the dropdown */
+  width: 100%;
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis;
+
+  svg { 
+    color: #0B8457; 
+    min-width: 16px; 
+  }
 `;
 
 const DropdownButton = styled(motion.button)`

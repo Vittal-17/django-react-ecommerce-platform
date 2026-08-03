@@ -10,6 +10,7 @@ import styled from 'styled-components';
 import { FaUserPlus, FaCheckCircle, FaCircle } from 'react-icons/fa';
 import FullScreenSpinner from '../components/FullScreenSpinner'; 
 import AppLayout from '../components/AppLayout';
+import {GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -128,6 +129,7 @@ const Register = () => {
       </AnimatePresence>
 
       <AppLayout>
+        <GlowingPageContainer $maxWidth="1100px">
         {/* 🚀 AuthWrapper Perfectly Centers the Card */}
         <AuthWrapper>
           <RegisterCard
@@ -236,7 +238,8 @@ const Register = () => {
               Already have an account? <Link to="/login" state={{ from }}>Login now</Link>
             </LoginLink>
           </RegisterCard>
-        </AuthWrapper>
+          </AuthWrapper>
+        </GlowingPageContainer>
       </AppLayout>
     </>
   );
@@ -250,11 +253,17 @@ export default Register;
 
 const AuthWrapper = styled.div`
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 65vh; /* Centers the card vertically inside the canvas */
+  /* 🚀 CRITICAL FIX: Changed from 'center' to 'flex-start'. 
+     This ensures the top is NEVER chopped off under the navbar. */
+  justify-content: flex-start; 
   width: 100%;
-  padding: 2rem 1rem;
+  padding-top: 0.5rem; /* Just a tiny bit of breathing room */
+
+  @media (max-width: 768px) {
+    padding-top: 0;
+  }
 `;
 
 const RegisterCard = styled(motion.div)`
@@ -262,25 +271,88 @@ const RegisterCard = styled(motion.div)`
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(11, 132, 87, 0.12);
-  padding: 3rem 2.5rem;
   border-radius: 24px;
   box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.1);
   width: 100%;
-  max-width: 440px;
+  max-width: 420px; /* 🚀 Slimmed down slightly */
   text-align: center;
+  box-sizing: border-box;
+  margin: 0 auto;
+
+  /* 🚀 Reduced top/bottom padding heavily */
+  padding: 1.5rem 2rem; 
+
+  h1 {
+    margin: 0.5rem 0 0.25rem 0;
+    font-size: 1.4rem;
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    font-size: 0.85rem;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem; /* Tightened the gap between inputs */
+  }
+
+  /* 🔥 THE FAT TRIMMER: Forcibly shrink the height of inputs and buttons 🔥 */
+  input {
+    padding: 0.65rem 1rem !important; 
+    font-size: 0.9rem !important;
+    border-radius: 10px !important;
+  }
+
+  button {
+    padding: 0.75rem 1rem !important;
+    margin-top: 0.25rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  @media (max-width: 768px) {
+      padding: 1.5rem 1rem;
+      margin: 1rem auto;
+      width: 95%; /* Gives just a tiny sliver of space on the edges to prove it's a card */
+      
+      /* 🔥 THE GLASS RESTORATION 🔥 */
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px -10px rgba(11, 132, 87, 0.1);
+  }
 `;
 
 const IconWrapper = styled(motion.div)`
-  width: 60px;
-  height: 60px;
   background: #ECFDF5;
   color: #0B8457;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1.5rem auto;
   box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.1);
+  
+  /* 🚀 Shrunk the icon slightly */
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 0.5rem auto; 
+  
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  @media (max-width: 768px) {
+    width: 44px;
+    height: 44px;
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
 `;
 
 const Title = styled.h1`

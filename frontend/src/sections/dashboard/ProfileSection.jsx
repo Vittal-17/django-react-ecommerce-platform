@@ -368,13 +368,46 @@ const PremiumButton = styled(motion.button)`
 `;
 
 const Overlay = styled(motion.div)` 
-  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; flex-direction: column; 
+  position: fixed; 
+  inset: 0; 
+  background: rgba(15, 23, 42, 0.6); 
+  backdrop-filter: blur(8px); 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  z-index: 1000; 
+  padding: 1rem; 
+  flex-direction: column; 
+  /* 🚀 FIX: Ensures the overlay's padding doesn't push elements off-screen */
+  box-sizing: border-box; 
 `;
 
 const ModalCard = styled(motion.div)` 
-  position: relative; background: #ffffff; padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid rgba(11, 132, 87, 0.1);
+  position: relative; 
+  background: #ffffff; 
+  padding: 2.5rem; 
+  border-radius: 24px; 
+  width: 100%; 
+  max-width: 440px; 
+  text-align: center; 
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); 
+  border: 1px solid rgba(11, 132, 87, 0.1);
+  
+  /* 🚀 CRITICAL FIX: Forces padding to stay inside the 100% width boundary */
+  box-sizing: border-box; 
+  
   h3 { margin: 0 0 0.5rem 0; color: #0F172A; font-size: 1.5rem; font-weight: 800; } 
   p { color: #64748B; margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5; }
+
+  /* 🚀 MOBILE FIX: Shrink the massive desktop padding so the modal fits perfectly on phones */
+  @media (max-width: 768px) {
+    padding: 1.5rem 1.25rem;
+    border-radius: 20px;
+    
+    h3 {
+      font-size: 1.3rem;
+    }
+  }
 `;
 
 const ModalIconWrapper = styled.div`

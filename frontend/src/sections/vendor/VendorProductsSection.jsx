@@ -365,15 +365,66 @@ const ProductCard = styled(motion.div)`
 `;
 
 // MODAL UI
-const Overlay = styled(motion.div)` position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; `;
-const ModalCard = styled(motion.div)` position: relative; background: white; padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid rgba(11, 132, 87, 0.1); h3 { margin: 0 0 0.5rem 0; color: #0F172A; font-size: 1.5rem; font-weight: 800; } p { color: #64748B; margin-bottom: 0; font-size: 0.95rem; }`;
+const Overlay = styled(motion.div)` 
+  position: fixed; 
+  inset: 0; 
+  background: rgba(15, 23, 42, 0.6); 
+  backdrop-filter: blur(8px); 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  z-index: 1000; 
+  padding: 1rem; 
+  /* 🚀 FIX: Keeps overlay padding strictly within boundaries */
+  box-sizing: border-box; 
+`;
+
+const ModalCard = styled(motion.div)` 
+  position: relative; 
+  background: white; 
+  padding: 2.5rem; 
+  border-radius: 24px; 
+  width: 100%; 
+  max-width: 440px; 
+  text-align: center; 
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); 
+  border: 1px solid rgba(11, 132, 87, 0.1);
+  
+  /* 🚀 CRITICAL FIX: Forces padding inside the box and enables internal scrolling */
+  box-sizing: border-box;
+  max-height: 90vh; /* Modal will never be taller than 90% of the screen */
+  overflow-y: auto; /* Adds a scrollbar if the content is too tall */
+
+  h3 { margin: 0 0 0.5rem 0; color: #0F172A; font-size: 1.5rem; font-weight: 800; } 
+  p { color: #64748B; margin-bottom: 0; font-size: 0.95rem; }
+
+  /* 🚀 MOBILE FIX: Shrink the heavy padding so the form can breathe */
+  @media (max-width: 768px) {
+    padding: 1.5rem 1.25rem;
+    border-radius: 20px;
+    
+    h3 { font-size: 1.3rem; }
+  }
+`;
+
 const ModalIconWrapper = styled.div` width: 55px; height: 55px; background: #ECFDF5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; `;
 const ModalDangerIconWrapper = styled.div` width: 55px; height: 55px; background: #FEF2F2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; `;
 const CloseBtn = styled.button` position: absolute; top: 1.2rem; right: 1.2rem; background: none; border: none; font-size: 1.2rem; color: #94A3B8; cursor: pointer; &:hover { color: #0F172A; } `;
 
 const ModalContentWrapper = styled.div` display: flex; flex-direction: column; gap: 1rem; width: 100%; margin-top: 1.5rem; box-sizing: border-box; `;
-const GridRow = styled.div` display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; width: 100%; box-sizing: border-box; `;
 
+const GridRow = styled.div` 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 1rem; 
+  width: 100%; 
+  box-sizing: border-box; 
+
+  /* 🚀 MOBILE FIX: Stack the Price and Stock inputs on super small phones to prevent squishing */
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+`;
 const FormGroup = styled.div` display: flex; flex-direction: column; gap: 0.4rem; text-align: left; width: 100%; box-sizing: border-box; 
   label { font-weight: 700; color: #0F172A; font-size: 0.9rem; } 
   select, textarea { width: 100%; padding: 0.9rem 1.2rem; border-radius: 12px; border: 1px solid #E2E8F0; font-size: 1rem; outline: none; font-family: inherit; box-sizing: border-box; transition: all 0.2s; background: #F8FAFC; color: #0F172A; &:focus { border-color: #0B8457; background: #ffffff; box-shadow: 0 0 0 3px rgba(11, 132, 87, 0.1); } } 

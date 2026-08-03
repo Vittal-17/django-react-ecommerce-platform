@@ -7,7 +7,7 @@ import { FaCreditCard, FaPaypal, FaWallet, FaMapMarkerAlt, FaLock, FaCheckCircle
 import { toast } from "react-hot-toast";
 import { useNavigate, Link } from 'react-router-dom';
 import { SkeletonRow } from '../components/SkeletonLoader';
-import { PageHeader } from '../styles/SharedPageStyles';
+import { PageHeader,GlowingPageContainer } from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
 
 const Checkout = () => {
@@ -132,6 +132,7 @@ const Checkout = () => {
   if (cartItems.length === 0 && !isFetching) {
     return (
       <AppLayout>
+        <GlowingPageContainer $maxWidth="1100px">
         <CheckoutContainer>
           <EmptyState
             initial={{ opacity: 0, scale: 0.95 }}
@@ -142,12 +143,12 @@ const Checkout = () => {
             <p>Your cart is currently empty. Add some items to proceed.</p>
             <Link to="/products" className="action-btn"><FaArrowLeft /> Back to Store</Link>
           </EmptyState>
-        </CheckoutContainer>
+          </CheckoutContainer>
+        </GlowingPageContainer>
       </AppLayout>
     );
   }
 
-  // 🚀 The Modal is now OUTSIDE AppLayout so it breaks free from the frosted glass boundaries
   return (
     <>
       {/* --- PREMIUM PAYMENT PROCESSING MODAL --- */}
@@ -188,6 +189,7 @@ const Checkout = () => {
 
       {/* --- NORMAL PAGE CONTENT --- */}
       <AppLayout>
+        <GlowingPageContainer $maxWidth="1100px">
         <CheckoutContainer>
           <PageHeader
             initial={{ opacity: 0, y: -20 }}
@@ -340,7 +342,8 @@ const Checkout = () => {
               </TotalSection>
             </ContentGrid>
           )}
-        </CheckoutContainer>
+          </CheckoutContainer>
+        </GlowingPageContainer>
       </AppLayout>
     </>
   );
@@ -358,6 +361,10 @@ const CheckoutContainer = styled.div`
   max-width: 800px;
   margin: 0 auto;
   padding: 0 1.5rem;
+
+  @media (max-width: 768px) {
+    padding: 0 0.5rem;
+  }
 `;
 
 const BadgeTag = styled.span`
@@ -380,6 +387,10 @@ const ContentGrid = styled(motion.div)`
   display: flex;
   flex-direction: column;
   gap: 2rem;
+
+  @media (max-width: 768px) {
+    gap: 1.25rem;
+  }
 `;
 
 const GlassSection = styled(motion.section)`
@@ -390,6 +401,13 @@ const GlassSection = styled(motion.section)`
   padding: 2rem;
   border: 1px solid rgba(11, 132, 87, 0.12);
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
+
+  @media (max-width: 768px) {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+    }
 `;
 
 const SectionHeader = styled.h2`
@@ -403,6 +421,11 @@ const SectionHeader = styled.h2`
   margin-bottom: 1.5rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   padding-bottom: 1rem;
+
+  @media (max-width: 768px) {
+    font-size: 1.15rem;
+    margin-bottom: 1rem;
+  }
 `;
 
 // Cart Items
@@ -423,11 +446,22 @@ const CartItem = styled.div`
   transition: background 0.2s;
   
   &:hover { background: #F8FAFC; }
+
+  .details {
+    flex: 1;
+    min-width: 0; 
+  }
+
+  @media (max-width: 768px) {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
 `;
 
 const ProductImage = styled.div`
   width: 70px;
   height: 70px;
+  flex-shrink: 0; 
   border-radius: 12px;
   background: #F1F5F9;
   display: flex;
@@ -444,6 +478,12 @@ const ProductImage = styled.div`
   }
   
   .placeholder { width: 100%; height: 100%; background: #E2E8F0; }
+
+  @media (max-width: 768px) {
+    width: 60px;
+    height: 60px;
+    padding: 0.25rem;
+  }
 `;
 
 const ProductName = styled.div`
@@ -451,6 +491,11 @@ const ProductName = styled.div`
   color: #0F172A;
   font-size: 1.05rem;
   margin-bottom: 0.3rem;
+  word-wrap: break-word;
+
+  @media (max-width: 768px) {
+    font-size: 0.95rem;
+  }
 `;
 
 const ProductQty = styled.div`
@@ -459,6 +504,10 @@ const ProductQty = styled.div`
   font-weight: 500;
   
   span { margin: 0 0.4rem; color: #CBD5E1; }
+
+  @media (max-width: 768px) {
+    font-size: 0.8rem;
+  }
 `;
 
 const ItemTotal = styled.div`
@@ -466,6 +515,10 @@ const ItemTotal = styled.div`
   font-weight: 800;
   color: #0B8457;
   font-size: 1.15rem;
+
+  @media (max-width: 768px) {
+    font-size: 1rem;
+  }
 `;
 
 // Addresses
@@ -473,6 +526,11 @@ const AddressGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.25rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 `;
 
 const AddressCard = styled(motion.div)`
@@ -533,6 +591,10 @@ const AddressCard = styled(motion.div)`
     margin: 0;
     font-size: 0.95rem;
   }
+
+  @media (max-width: 768px) {
+    padding: 1.25rem;
+  }
 `;
 
 const SelectedBadge = styled(motion.div)`
@@ -558,7 +620,7 @@ const ContactInputWrapper = styled.div`
     display: flex;
     align-items: center;
     justify-content: space-between;
-    max-width: 400px;
+    max-width: 100%; /* 🚀 Fix: Allow flexible width */
     margin-bottom: 0.8rem;
     
     label {
@@ -594,7 +656,8 @@ const ContactInputWrapper = styled.div`
 
 const LockedField = styled.div`
   width: 100%;
-  max-width: 400px;
+  max-width: 100%; /* 🚀 Fix: Prevent bleeding past margins */
+  box-sizing: border-box; /* 🚀 Fix: Internalize padding so box matches parent width cleanly */
   padding: 1rem 1.2rem;
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
@@ -607,9 +670,12 @@ const LockedField = styled.div`
   gap: 0.8rem;
   cursor: not-allowed;
   user-select: none;
+  overflow: hidden;
+  word-wrap: break-word;
   
   .lock-icon {
     color: #94A3B8;
+    flex-shrink: 0;
   }
 `;
 
@@ -618,6 +684,10 @@ const PaymentOptions = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const PaymentOption = styled(motion.button)`
@@ -637,6 +707,12 @@ const PaymentOption = styled(motion.button)`
   span { color: ${props => props.$active ? '#0F172A' : '#475569'}; font-weight: 700; font-size: 0.95rem; }
   
   &:hover { border-color: ${props => props.$active ? '#0B8457' : '#CBD5E1'}; .icon { color: ${props => props.$active ? '#0B8457' : '#334155'}; } }
+
+  @media (max-width: 480px) {
+    flex-direction: row; 
+    padding: 1rem;
+    .icon { font-size: 1.5rem; }
+  }
 `;
 
 // Total & Submit
@@ -651,6 +727,14 @@ const TotalSection = styled(GlassSection)`
     
     span:first-child { font-size: 1.2rem; font-weight: 700; color: #475569; }
   }
+
+  @media (max-width: 768px) {
+    padding: 1.5rem 1rem;
+    .total-row {
+      margin-bottom: 1.5rem;
+      span:first-child { font-size: 1.05rem; }
+    }
+  }
 `;
 
 const TotalAmount = styled.div`
@@ -658,6 +742,10 @@ const TotalAmount = styled.div`
   font-weight: 900;
   color: #0F172A;
   letter-spacing: -1px;
+
+  @media (max-width: 768px) {
+    font-size: 1.8rem;
+  }
 `;
 
 const PlaceOrderButton = styled(motion.button)`

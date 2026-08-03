@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import { FaCheckCircle, FaReceipt, FaTruck, FaMapMarkerAlt, FaPhoneAlt, FaArrowRight, FaStore } from 'react-icons/fa';
 import AppLayout from '../components/AppLayout';
+import {GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const OrderSuccess = () => {
   const { orderId } = useParams();
@@ -31,8 +32,8 @@ const OrderSuccess = () => {
   };
 
   return (
-      <AppLayout>
-        {/* 🚀 Removed clashing TechGridBackground and AmbientGlows! */}
+    <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
         <SuccessContainer variants={containerVariants} initial="hidden" animate="visible">
           
           <IconWrapper variants={checkVariants}>
@@ -80,36 +81,36 @@ const OrderSuccess = () => {
           </ActionButtons>
 
         </SuccessContainer>
-      </AppLayout>
+      </GlowingPageContainer>
+    </AppLayout>
   );
 };
 
 export default OrderSuccess;
 
 // ==========================================
-// SAAS LEVEL STYLED COMPONENTS
+// SAAS LEVEL STYLED COMPONENTS (LIGHT GREEN THEME)
 // ==========================================
 
 const SuccessContainer = styled(motion.div)`
   position: relative;
   z-index: 1;
-  background: linear-gradient(135deg, #02a322 0%, #075E3E 100%);
+  
+  background: rgba(236, 253, 245, 0.85); 
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  max-width: 900px;
+  max-width: 950px; /* 🚀 Fix: Slightly widened container for better room */
   width: 100%;
   border-radius: 32px;
   padding: 4rem 3rem;
-  
-  /* 🚀 FIX: margin: 3rem auto instantly centers the card inside the glass layout! */
   margin: 3rem auto; 
-  
-  box-shadow: 0 30px 60px -15px rgba(11, 132, 87, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 30px 60px -15px rgba(11, 132, 87, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   text-align: center;
+  box-sizing: border-box; 
   
   h1 { 
-    color: #ffffff; 
+    color: #0B8457; 
     margin-bottom: 0.6rem; 
     font-size: 2.8rem; 
     font-weight: 900;
@@ -117,19 +118,23 @@ const SuccessContainer = styled(motion.div)`
   }
   
   .subtitle { 
-    color: #E2E8F0; 
+    color: #475569; 
     font-size: 1.15rem; 
     margin-bottom: 3rem; 
     line-height: 1.6;
     max-width: 600px;
     margin-inline: auto;
 
-    strong { color: #ffffff; }
+    strong { color: #0F172A; } 
   }
 
   @media(max-width: 768px) {
-    margin-top: 5rem;
-    padding: 2.5rem 1.5rem;
+    margin-top: 2rem;
+    width: calc(100% - 1rem); /* 🚀 Fix: Maximizes mobile width safely */
+    padding: 2.5rem 1rem;
+    border-radius: 24px;
+    
+    h1 { font-size: 2.2rem; }
   }
 `;
 
@@ -143,16 +148,16 @@ const IconWrapper = styled(motion.div)`
   justify-content: center;
   font-size: 5rem;
   color: #ffffff;
-  background: #065F46;
+  background: #10B981; 
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  border: 4px solid #ffffff;
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
 
   .aura-ring {
     position: absolute;
-    inset: -8px;
+    inset: -12px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(16, 185, 129, 0.15); 
     animation: pulseAura 2.5s infinite ease-in-out;
   }
 
@@ -167,6 +172,12 @@ const IconWrapper = styled(motion.div)`
     z-index: 2;
     color: #ffffff;
   }
+  
+  @media(max-width: 768px) {
+    width: 80px;
+    height: 80px;
+    font-size: 4rem;
+  }
 `;
 
 const GridContainer = styled(motion.div)`
@@ -176,17 +187,18 @@ const GridContainer = styled(motion.div)`
   margin-bottom: 3rem;
   text-align: left;
   
-  @media (max-width: 650px) {
+  @media (max-width: 750px) {
     grid-template-columns: 1fr;
   }
 `;
 
 const DetailCard = styled.div`
   background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 20px;
   padding: 1.8rem;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box; /* 🚀 Fix: Internalize sizing */
   
   h3 { 
     display: flex; 
@@ -198,6 +210,10 @@ const DetailCard = styled.div`
     margin: 0; 
     
     svg { color: #0B8457; }
+  }
+
+  @media (max-width: 768px) {
+    padding: 1.25rem;
   }
 `;
 
@@ -211,13 +227,26 @@ const InfoRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem; 
   margin-bottom: 0.8rem;
   font-size: 0.98rem;
   color: #334155;
   
-  span { color: #64748B; font-weight: 500; }
-  strong { color: #0F172A; font-weight: 700; }
-  .mono { font-family: monospace; font-size: 0.9rem; background: #F8FAFC; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid #E2E8F0; }
+  span { color: #64748B; font-weight: 500; flex-shrink: 0; }
+  strong { color: #0F172A; font-weight: 700; text-align: right; }
+  
+  .mono { 
+    font-family: monospace; 
+    font-size: 0.85rem; 
+    background: #F8FAFC; 
+    padding: 0.15rem 0.5rem; 
+    border-radius: 4px; 
+    border: 1px solid #E2E8F0; 
+    word-break: break-all; 
+    max-width: 220px;
+    text-align: right;
+  }
+  
   .highlight { color: #0B8457; font-size: 1.25rem; font-weight: 900; }
   
   .icon-sub { color: #0B8457; margin-right: 0.6rem; flex-shrink: 0; }
@@ -225,12 +254,27 @@ const InfoRow = styled.div`
   &.address-row {
     align-items: flex-start;
     text-align: left;
-    span { color: #334155; line-height: 1.5; }
+    
+    /* 🚀 CRITICAL FIX: Forces long address strings to wrap and stay inside the card boundaries */
+    span { 
+      color: #334155; 
+      line-height: 1.5; 
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
   }
 
   .label-flex {
     display: flex;
     align-items: center;
+  }
+
+  @media (max-width: 480px) {
+    .mono {
+      max-width: 170px;
+    }
   }
 `;
 
@@ -245,8 +289,8 @@ const ActionButtons = styled(motion.div)`
 `;
 
 const PrimaryButton = styled(motion.button)`
-  background: #ffffff;
-  color: #0B8457;
+  background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%);
+  color: #ffffff;
   border: none;
   padding: 1.1rem 2.2rem;
   border-radius: 16px;
@@ -257,17 +301,17 @@ const PrimaryButton = styled(motion.button)`
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 25px rgba(11, 132, 87, 0.25);
 
   &:hover {
-    background: #F8FAFC;
+    box-shadow: 0 10px 30px rgba(11, 132, 87, 0.4);
   }
 `;
 
 const SecondaryButton = styled(motion.button)`
-  background: rgba(7, 94, 62, 0.5);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(11, 132, 87, 0.08);
+  color: #0B8457;
+  border: 1px solid rgba(11, 132, 87, 0.2);
   padding: 1.1rem 2.2rem;
   border-radius: 16px;
   font-size: 1.05rem;
@@ -277,10 +321,9 @@ const SecondaryButton = styled(motion.button)`
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(7, 94, 62, 0.8);
-    border-color: rgba(255, 255, 255, 0.7);
+    background: rgba(11, 132, 87, 0.15);
   }
 `;

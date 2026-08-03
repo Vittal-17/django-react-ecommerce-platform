@@ -9,6 +9,7 @@ import styled from 'styled-components';
 import { FaSignInAlt, FaLock } from 'react-icons/fa';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AppLayout from '../components/AppLayout';
+import {GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const Login = () => {
   const { loginUser } = useContext(AuthContext);
@@ -63,6 +64,7 @@ const Login = () => {
       </AnimatePresence>
 
       <AppLayout>
+        <GlowingPageContainer $maxWidth="1100px">
         {/* 🚀 AuthWrapper perfectly centers the card inside the AppLayout canvas */}
         <AuthWrapper>
           <LoginCard
@@ -124,7 +126,8 @@ const Login = () => {
               Don't have an account? <Link to="/register" state={{ from }}>Create one now</Link>
             </RegisterLink>
           </LoginCard>
-        </AuthWrapper>
+          </AuthWrapper>
+        </GlowingPageContainer>
       </AppLayout>
     </>
   );
@@ -136,11 +139,18 @@ const Login = () => {
 
 const AuthWrapper = styled.div`
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 65vh; /* Centers the card vertically inside the canvas */
   width: 100%;
-  padding: 2rem 1rem;
+  height: 100%;
+  
+  /* 🚀 Desktop: Pulls the entire form up to eat the dead space at the top */
+  margin-top: -1.5rem; 
+
+  @media (max-width: 768px) {
+    margin-top: 0;
+  }
 `;
 
 const LoginCard = styled(motion.div)`
@@ -148,25 +158,84 @@ const LoginCard = styled(motion.div)`
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(11, 132, 87, 0.12);
-  padding: 3rem 2.5rem;
   border-radius: 24px;
   box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 440px;
   text-align: center;
+  box-sizing: border-box;
+  margin: 0 auto;
+
+  /* 🚀 Desktop: Tighten the master padding */
+  padding: 1.5rem 2.5rem 2rem 2.5rem; 
+
+  /* 🚀 AGGRESSIVE INTERNAL SQUISH: Forces child elements to stop spreading */
+  h1, h2 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-size: 1.5rem;
+  }
+
+  p {
+    margin-top: 0;
+    margin-bottom: 1.25rem;
+    font-size: 0.9rem;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    /* 🚀 The main culprit: Limit the gap between the 4 inputs */
+    gap: 0.85rem; 
+  }
+
+  @media (max-width: 768px) {
+      padding: 1.5rem 1rem;
+      margin: 1rem auto;
+      width: 95%; /* Gives just a tiny sliver of space on the edges to prove it's a card */
+      
+      /* 🔥 THE GLASS RESTORATION 🔥 */
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px -10px rgba(11, 132, 87, 0.1);
+    
+    form {
+      gap: 1rem; /* Give them a bit more breathing room for fat-fingering on mobile */
+    }
+  }
 `;
 
 const IconWrapper = styled(motion.div)`
-  width: 60px;
-  height: 60px;
   background: #ECFDF5;
   color: #0B8457;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1.5rem auto;
   box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.1);
+  
+  /* 🚀 Desktop: Shrink the icon and its bottom margin */
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 0.75rem auto; 
+  
+  svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  @media (max-width: 768px) {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 0.5rem auto;
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
 `;
 
 const Title = styled.h1`

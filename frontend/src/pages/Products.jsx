@@ -8,7 +8,7 @@ import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
 import { SkeletonProductCard } from '../components/SkeletonLoader';
 import AppLayout from '../components/AppLayout';
-import {PageHeader } from '../styles/SharedPageStyles';
+import {PageHeader,GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const Products = () => {
   const { axiosInstance, user } = useContext(AuthContext);
@@ -26,7 +26,7 @@ const Products = () => {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('');
-  
+
   // UI Slider State
   const [highestPrice, setHighestPrice] = useState(1000);
   const [minPrice, setMinPrice] = useState(0);
@@ -42,7 +42,7 @@ const Products = () => {
     const timer = setTimeout(() => {
       setDebouncedMin(minPrice);
       setDebouncedMax(maxPrice);
-    }, 500); 
+    }, 500);
     return () => clearTimeout(timer);
   }, [minPrice, maxPrice]);
 
@@ -61,21 +61,21 @@ const Products = () => {
           const { data } = await axiosInstance.get(`/api/products/${p.id}/`);
           return { ...p, price: Number(p.price), image: data.image_url, stock: data.stock || 0 };
         }));
-        
+
         setProducts(productsData);
-            
+
         const calculatedMaxPrice = Math.ceil(Math.max(...productsData.map(p => p.price), 100));
         setHighestPrice(calculatedMaxPrice);
         setMaxPrice(calculatedMaxPrice);
-        setDebouncedMax(calculatedMaxPrice); 
-        
+        setDebouncedMax(calculatedMaxPrice);
+
         const initialQuantities = {};
         productsData.forEach(p => initialQuantities[p.id] = 1);
         setQuantities(initialQuantities);
       } catch (err) {
         console.error("Failed to load products", err);
       } finally {
-        setIsLoading(false); 
+        setIsLoading(false);
       }
     };
 
@@ -84,8 +84,8 @@ const Products = () => {
     axiosInstance.get('/api/categories/')
       .then(res => setCategories(res.data.results || res.data))
       .catch(() => toast.error('❌ Failed to load categories.'));
-      
-  }, [axiosInstance, currentPage]); 
+
+  }, [axiosInstance, currentPage]);
 
   // Unified Filtering Logic
   useEffect(() => {
@@ -97,7 +97,7 @@ const Products = () => {
 
     if (sort === 'price_asc') result.sort((a, b) => a.price - b.price);
     else if (sort === 'price_desc') result.sort((a, b) => b.price - a.price);
-    
+
     setFiltered(result);
   }, [search, category, sort, debouncedMin, debouncedMax, inStockOnly, products]);
 
@@ -162,6 +162,7 @@ const Products = () => {
 
   return (
     <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
       <PageHeader
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -194,9 +195,9 @@ const Products = () => {
 
         <AnimatePresence>
           {showFilters && (
-            <AdvancedFilterPanel 
-              initial={{ opacity: 0, height: 0, marginTop: 0 }} 
-              animate={{ opacity: 1, height: 'auto', marginTop: '1.25rem' }} 
+            <AdvancedFilterPanel
+              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginTop: '1.25rem' }}
               exit={{ opacity: 0, height: 0, marginTop: 0 }}
             >
               <FilterGrid>
@@ -217,12 +218,12 @@ const Products = () => {
 
                 <AnimatePresence>
                   {filtersActive && (
-                    <ClearButton 
-                      onClick={clearFilters} 
-                      initial={{ opacity: 0, scale: 0.9 }} 
-                      animate={{ opacity: 1, scale: 1 }} 
+                    <ClearButton
+                      onClick={clearFilters}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.9 }}
-                      whileHover={{ scale: 1.05 }} 
+                      whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
                       <FaTimes /> Clear All
@@ -265,8 +266,8 @@ const Products = () => {
                 const isAtLimit = qty >= product.stock;
 
                 return (
-                  <ProductCard 
-                    key={product.id} 
+                  <ProductCard
+                    key={product.id}
                     layout
                     variants={cardVariants}
                     whileHover={{ y: -8 }}
@@ -294,21 +295,21 @@ const Products = () => {
                         <Link to={`/products/${product.id}/`} className="title">{product.name}</Link>
                         <p className="desc">{product.description?.slice(0, 65)}...</p>
                       </div>
-                      
+
                       <PriceRow>
                         <Price>${product.price.toFixed(2)}</Price>
-                        
+
                         <QuantityControl>
                           <button onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.max(1, prev[product.id] - 1) }))} disabled={qty <= 1}>-</button>
                           <span>{qty}</span>
                           <button disabled={isAtLimit} onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.min(product.stock, prev[product.id] + 1) }))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
                         </QuantityControl>
                       </PriceRow>
-                      
-                      <AddToCartButton 
-                        onClick={() => addToCart(product)} 
-                        disabled={product.stock === 0} 
-                        whileTap={{ scale: 0.96 }} 
+
+                      <AddToCartButton
+                        onClick={() => addToCart(product)}
+                        disabled={product.stock === 0}
+                        whileTap={{ scale: 0.96 }}
                         $outOfStock={product.stock === 0}
                       >
                         <FaShoppingCart /> {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
@@ -329,6 +330,7 @@ const Products = () => {
           </PaginationWrapper>
         )}
       </ProductsContainer>
+    </GlowingPageContainer>
     </AppLayout>
   );
 };
@@ -355,7 +357,7 @@ const BadgeTag = styled.span`
 
 const GlassControlHub = styled.div`
   position: sticky;
-  top: 86px; 
+  top: 86px;
   z-index: 50;
   max-width: 1250px;
   margin: 0 auto 2.5rem auto;
@@ -367,6 +369,14 @@ const GlassControlHub = styled.div`
   padding: 1.1rem 1.5rem;
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.03);
   width: 92%;
+  box-sizing: border-box;
+
+  /* 🚀 MOBILE FIX: Shrink padding and widen to save space for filters */
+  @media (max-width: 768px) {
+    padding: 1rem;
+    width: 95%;
+    margin-bottom: 1.5rem;
+  }
 `;
 
 const FilterRow = styled.div`
@@ -387,6 +397,7 @@ const SearchBar = styled.div`
   flex: 2;
   min-width: 260px;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 
   &:focus-within {
     border-color: #0B8457;
@@ -404,8 +415,12 @@ const SearchBar = styled.div`
     &::placeholder { color: #9CA3AF; }
   }
   .icon { color: #9CA3AF; font-size: 1.1rem; }
-`;
 
+  /* 🚀 MOBILE FIX: Force the search bar to span full width on its own row */
+  @media (max-width: 768px) {
+    min-width: 100%;
+  }
+`;
 const Select = styled.select`
   padding: 0.7rem 1.2rem;
   border-radius: 50px;
@@ -423,8 +438,17 @@ const Select = styled.select`
   background-repeat: no-repeat;
   background-position: right 1rem center;
   background-size: 1em;
+  box-sizing: border-box;
 
   &:focus { outline: none; border-color: #0B8457; box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1); }
+
+  /* 🚀 MOBILE FIX: Allow the two dropdowns to neatly share a single row */
+  @media (max-width: 768px) {
+    min-width: 45%;
+    flex: 1 1 45%;
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+  }
 `;
 
 const AdvancedToggle = styled.button`
@@ -466,7 +490,7 @@ const PriceSliderContainer = styled.div`
   gap: 1.5rem;
   flex: 1;
   min-width: 300px;
-  
+
   label { font-weight: 600; color: #374151; font-size: 0.95rem; }
 `;
 
@@ -489,7 +513,7 @@ const ToggleSwitch = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  
+
   label { font-weight: 600; color: #374151; cursor: pointer; font-size: 0.95rem; }
   input[type="checkbox"] { width: 18px; height: 18px; accent-color: #0B8457; cursor: pointer; }
 `;
@@ -506,12 +530,25 @@ const ProductsContainer = styled.div`
   margin: 0 auto;
   padding: 0 2.5rem;
   box-sizing: border-box;
+
+  /* 🚀 MOBILE FIX: Reduced padding and added top breathing room so the first card doesn't slam into the sticky filter hub */
+  @media (max-width: 768px) {
+    padding: 0 1rem;
+    margin-top: 1rem; 
+  }
 `;
 
 const ProductGrid = styled(motion.div)`
   display: grid;
   gap: 2rem;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+
+  /* 🚀 MOBILE FIX: Switch to Flexbox to prevent Framer Motion from collapsing the CSS Grid gaps */
+  @media (max-width: 768px) {
+    display: flex;
+    flex-direction: column;
+    gap: 0; /* Spacing is now handled directly by the cards */
+  }
 `;
 
 const ProductCard = styled(motion.div)`
@@ -524,10 +561,21 @@ const ProductCard = styled(motion.div)`
   flex-direction: column;
   height: 100%;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
 
   &:hover {
     border-color: rgba(11, 132, 87, 0.4);
     box-shadow: 0 20px 40px -10px rgba(11, 132, 87, 0.15);
+  }
+
+  /* 🚀 MOBILE FIX: Hardcoded margins guarantee flawless vertical spacing during layout animations */
+  @media (max-width: 768px) {
+    margin-bottom: 1.5rem;
+
+    /* Removes the margin from the very last card so it doesn't create dead space at the footer */
+    &:last-child {
+      margin-bottom: 0;
+    }
   }
 `;
 
@@ -550,20 +598,22 @@ const ProductImage = styled.div`
     padding: 1.5rem;
     box-sizing: border-box;
   }
-  
+
   img {
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
     transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-    mix-blend-mode: multiply; 
+    mix-blend-mode: multiply;
   }
-  
+
   &:hover img {
     transform: scale(1.12);
   }
 `;
+
+
 
 const StockBadge = styled.div`
   position: absolute;
@@ -579,127 +629,127 @@ const StockBadge = styled.div`
   border-radius: 50px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  
-  background: ${props => 
-    props.$stock > 5 ? 'rgba(236, 253, 245, 0.9)' : 
-    props.$stock > 0 ? 'rgba(254, 243, 199, 0.9)' : 
+
+  background: ${props =>
+    props.$stock > 5 ? 'rgba(236, 253, 245, 0.9)' :
+    props.$stock > 0 ? 'rgba(254, 243, 199, 0.9)' :
     'rgba(254, 226, 226, 0.9)'};
-    
-  color: ${props => 
-    props.$stock > 5 ? '#047857' : 
-    props.$stock > 0 ? '#B45309' : 
+
+  color: ${props =>
+    props.$stock > 5 ? '#047857' :
+    props.$stock > 0 ? '#B45309' :
     '#B91C1C'};
-    
-  border: 1px solid ${props => 
-    props.$stock > 5 ? 'rgba(16, 185, 129, 0.3)' : 
-    props.$stock > 0 ? 'rgba(245, 158, 11, 0.3)' : 
+
+  border: 1px solid ${props =>
+    props.$stock > 5 ? 'rgba(16, 185, 129, 0.3)' :
+    props.$stock > 0 ? 'rgba(245, 158, 11, 0.3)' :
     'rgba(239, 68, 68, 0.3)'};
 `;
 
 const ProductInfo = styled.div`
-  display: flex; 
-  flex-direction: column; 
+  display: flex;
+  flex-direction: column;
   flex-grow: 1;
-  
+
   .meta {
     flex-grow: 1;
     margin-bottom: 1.2rem;
   }
-  
+
   .title {
-    font-size: 1.15rem; 
-    font-weight: 800; 
-    color: #111827; 
-    text-decoration: none; 
-    line-height: 1.35; 
-    display: -webkit-box; 
-    -webkit-line-clamp: 2; 
-    -webkit-box-orient: vertical; 
-    overflow: hidden; 
-    margin-bottom: 0.5rem; 
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #111827;
+    text-decoration: none;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
     transition: color 0.2s;
-    
+
     &:hover { color: #0B8457; }
   }
-  
-  .desc { 
-    color: #6B7280; 
-    font-size: 0.88rem; 
-    line-height: 1.5; 
+
+  .desc {
+    color: #6B7280;
+    font-size: 0.88rem;
+    line-height: 1.5;
   }
 `;
 
 const PriceRow = styled.div`
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 1.2rem;
 `;
 
 const Price = styled.div`
-  font-size: 1.45rem; 
-  font-weight: 900; 
-  color: #0F172A; 
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #0F172A;
   letter-spacing: -0.5px;
 `;
 
 const QuantityControl = styled.div`
-  display: flex; 
-  align-items: center; 
-  background: #F8FAFC; 
-  border-radius: 50px; 
+  display: flex;
+  align-items: center;
+  background: #F8FAFC;
+  border-radius: 50px;
   padding: 0.25rem;
   border: 1px solid #E2E8F0;
-  
-  button { 
-    background: #ffffff; 
-    color: #334155; 
-    border: none; 
-    width: 28px; 
-    height: 28px; 
-    border-radius: 50%; 
-    cursor: pointer; 
-    font-weight: 800; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08); 
+
+  button {
+    background: #ffffff;
+    color: #334155;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     transition: all 0.2s ease;
-    
-    &:hover:not(:disabled) { 
-      background: #0B8457; 
-      color: white; 
+
+    &:hover:not(:disabled) {
+      background: #0B8457;
+      color: white;
     }
   }
-  
-  span { 
-    min-width: 30px; 
-    text-align: center; 
-    font-size: 0.9rem; 
-    font-weight: 700; 
-    color: #0F172A; 
+
+  span {
+    min-width: 30px;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0F172A;
   }
 `;
 
 const AddToCartButton = styled(motion.button)`
-  width: 100%; 
-  padding: 0.9rem; 
-  background: ${props => props.$outOfStock ? '#F1F5F9' : 'linear-gradient(135deg, #0B8457 0%, #075E3E 100%)'}; 
-  color: ${props => props.$outOfStock ? '#94A3B8' : '#ffffff'}; 
-  border: none; 
-  border-radius: 14px; 
-  font-weight: 700; 
-  font-size: 0.95rem; 
-  cursor: ${props => props.$outOfStock ? 'not-allowed' : 'pointer'}; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  gap: 0.6rem; 
+  width: 100%;
+  padding: 0.9rem;
+  background: ${props => props.$outOfStock ? '#F1F5F9' : 'linear-gradient(135deg, #0B8457 0%, #075E3E 100%)'};
+  color: ${props => props.$outOfStock ? '#94A3B8' : '#ffffff'};
+  border: none;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: ${props => props.$outOfStock ? 'not-allowed' : 'pointer'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
   position: relative;
   overflow: hidden;
   box-shadow: ${props => props.$outOfStock ? 'none' : '0 4px 14px rgba(11, 132, 87, 0.25)'};
   transition: all 0.3s ease;
-  
+
   &::after {
     content: '';
     position: absolute;
@@ -711,31 +761,31 @@ const AddToCartButton = styled(motion.button)`
     transform: skewX(-25deg);
     animation: ${props => props.$outOfStock ? 'none' : 'shimmer 4s infinite'};
   }
-  
+
   @keyframes shimmer {
     0% { left: -150%; }
     20% { left: 200%; }
     100% { left: 200%; }
   }
-  
-  &:hover:not(:disabled) { 
-    box-shadow: 0 6px 20px rgba(11, 132, 87, 0.4); 
+
+  &:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(11, 132, 87, 0.4);
   }
 `;
 
 const EmptyState = styled(motion.div)`
-  text-align: center; 
-  padding: 5rem 2rem; 
-  background: #ffffff; 
-  border-radius: 24px; 
+  text-align: center;
+  padding: 5rem 2rem;
+  background: #ffffff;
+  border-radius: 24px;
   border: 1px dashed #E2E8F0;
   max-width: 600px;
   margin: 0 auto;
-  
+
   .emoji { font-size: 3.5rem; display: block; margin-bottom: 1rem; }
   h3 { color: #0F172A; font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
   p { color: #64748B; font-size: 1rem; margin-bottom: 1.5rem; }
-  
+
   .reset-btn {
     background: #0B8457;
     color: white;
@@ -745,7 +795,7 @@ const EmptyState = styled(motion.div)`
     font-weight: 700;
     cursor: pointer;
     transition: background 0.2s;
-    
+
     &:hover { background: #086341; }
   }
 `;
@@ -755,19 +805,19 @@ const PaginationWrapper = styled.div`
 `;
 
 const PageButton = styled.button`
-  padding: 0.7rem 1.6rem; 
-  border-radius: 50px; 
-  border: none; 
-  font-weight: 700; 
-  background: ${props => props.disabled ? '#F1F5F9' : '#0B8457'}; 
-  color: ${props => props.disabled ? '#94A3B8' : 'white'}; 
-  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'}; 
-  transition: all 0.2s ease; 
+  padding: 0.7rem 1.6rem;
+  border-radius: 50px;
+  border: none;
+  font-weight: 700;
+  background: ${props => props.disabled ? '#F1F5F9' : '#0B8457'};
+  color: ${props => props.disabled ? '#94A3B8' : 'white'};
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  transition: all 0.2s ease;
   box-shadow: ${props => props.disabled ? 'none' : '0 4px 12px rgba(11, 132, 87, 0.25)'};
-  
-  &:hover:not(:disabled) { 
-    background: #086341; 
-    transform: translateY(-2px); 
+
+  &:hover:not(:disabled) {
+    background: #086341;
+    transform: translateY(-2px);
   }
 `;
 

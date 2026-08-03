@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { FaChartLine, FaBox, FaStar, FaStore } from 'react-icons/fa';
 import AuthContext from '../context/AuthContext';
-import {PageHeader} from '../styles/SharedPageStyles';
+import {PageHeader,GlowingPageContainer} from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
 
 // Import Modular Sections
@@ -27,7 +27,8 @@ const VendorDashboard = () => {
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) return null;
 
   return (
-      <AppLayout>
+    <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
       <AmbientBackground />
       <DashboardContainer>
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -56,6 +57,7 @@ const VendorDashboard = () => {
           </ContentArea>
         </motion.div>
       </DashboardContainer>
+      </GlowingPageContainer>
       </AppLayout>
   );
 };
@@ -121,8 +123,15 @@ const TabBar = styled.div`
   box-shadow: 0 4px 20px rgba(0,0,0,0.02);
   width: fit-content;
   margin-inline: auto;
-  overflow-x: auto; 
-  scrollbar-width: none; 
+
+  /* 🚀 MOBILE FIX: Allow tabs to wrap gracefully instead of bleeding off screen */
+  @media (max-width: 768px) {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 24px;
+    padding: 0.5rem;
+  }
 `;
 
 const Tab = styled(motion.button)` 
@@ -143,6 +152,14 @@ const Tab = styled(motion.button)`
 
   &:hover { 
     color: ${props => props.$active ? '#ffffff' : '#0F172A'}; 
+  }
+
+  /* 🚀 MOBILE FIX: Dynamically resize tabs to fill the available space */
+  @media (max-width: 768px) {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    flex: 1 1 auto; 
+    justify-content: center;
   }
 `;
 

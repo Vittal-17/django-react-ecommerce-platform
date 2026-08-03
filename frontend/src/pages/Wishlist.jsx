@@ -7,7 +7,7 @@ import { FaTrashAlt, FaShoppingCart, FaArrowRight, FaHeart, FaExclamationTriangl
 import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
 import { SkeletonProductCard } from '../components/SkeletonLoader';
-import {PageHeader} from '../styles/SharedPageStyles';
+import {PageHeader,GlowingPageContainer} from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
 import ModalPortal from '../components/ModalPortal';
 
@@ -146,7 +146,8 @@ const Wishlist = () => {
   };
 
   return (
-      <AppLayout>     
+    <AppLayout>   
+      <GlowingPageContainer $maxWidth="1100px">
       {/* --- Confirmation Modal --- */}
       <AnimatePresence>
         {isModalOpen && (
@@ -245,7 +246,8 @@ const Wishlist = () => {
             </AnimatePresence>
           </WishlistGrid>
         )}
-      </WishlistContainer>
+        </WishlistContainer>
+      </GlowingPageContainer>
       </AppLayout> 
   );
 };

@@ -7,7 +7,7 @@ import styled from 'styled-components';
 import { toast } from "react-hot-toast";
 import { SkeletonRow } from '../components/SkeletonLoader';
 import { FaTrashAlt, FaHeart, FaRegHeart, FaArrowRight, FaShieldAlt, FaExclamationTriangle } from 'react-icons/fa';
-import {PageHeader} from '../styles/SharedPageStyles';
+import {PageHeader,GlowingPageContainer} from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
 import ModalPortal from '../components/ModalPortal';
 
@@ -199,6 +199,7 @@ const Cart = () => {
 
   return (
     <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
       <AmbientBackground />
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={executeRemoveItem} />
 
@@ -238,7 +239,7 @@ const Cart = () => {
                 {cartItems.map(item => (
                   <CartItemCard 
                     key={item.id}
-                    layout // Animates position when siblings are removed
+                    layout 
                     variants={itemVariants}
                     initial="hidden"
                     animate="visible"
@@ -321,7 +322,8 @@ const Cart = () => {
             </SummarySticky>
           </ContentGrid>
         )}
-      </CartContainer>
+        </CartContainer>
+      </GlowingPageContainer>
     </AppLayout>
   );
 };
@@ -360,7 +362,7 @@ const ContentGrid = styled.div`
   align-items: start;
 
   @media (min-width: 900px) {
-    grid-template-columns: 1.8fr 1fr; /* 🚀 Gives the cart list more space, summary floats right */
+    grid-template-columns: 1.8fr 1fr; 
   }
 `;
 
@@ -397,12 +399,13 @@ const ImageWrapper = styled.div`
   justify-content: center;
   padding: 1rem;
   border: 1px solid #F1F5F9;
+  box-sizing: border-box;
 
   img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    mix-blend-mode: multiply; /* Erases white backgrounds perfectly */
+    mix-blend-mode: multiply; 
   }
   
   @media (max-width: 600px) {
@@ -582,10 +585,17 @@ const CheckoutSummary = styled(motion.div)`
   .summary-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 1rem;
+    align-items: flex-start; /* 🚀 Fix: Aligns text cleanly if multi-line */
+    gap: 1rem; /* 🚀 Fix: Prevents text overlap */
+    margin-bottom: 1.2rem;
     color: #475569;
     font-size: 1.05rem;
     font-weight: 500;
+    
+    span:last-child {
+      text-align: right;
+      flex-shrink: 1;
+    }
     
     .free { color: #0B8457; font-size: 0.9rem; font-style: italic; }
   }

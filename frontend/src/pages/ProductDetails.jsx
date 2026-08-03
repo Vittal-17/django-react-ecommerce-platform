@@ -8,6 +8,7 @@ import { toast } from "react-hot-toast";
 import { FaStar, FaShoppingCart, FaArrowRight, FaCheckCircle, FaStore, FaExclamationTriangle } from 'react-icons/fa';
 import { SkeletonRow } from '../components/SkeletonLoader';
 import AppLayout from '../components/AppLayout';
+import {GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -120,6 +121,7 @@ const ProductDetail = () => {
 
   return (
     <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
       {/* 🚀 TOP BUY SECTION: Image and Primary Actions only */}
       <ContentGrid>
         <ImagePane 
@@ -248,7 +250,8 @@ const ProductDetail = () => {
             <PageButton onClick={() => setReviewPage(p => Math.min(p + 1, totalReviewPages))} disabled={reviewPage === totalReviewPages}>Next &rarr;</PageButton>
           </PaginationWrapper>
         )}
-      </ReviewsSection>
+        </ReviewsSection>
+      </GlowingPageContainer>
     </AppLayout>
   );
 };

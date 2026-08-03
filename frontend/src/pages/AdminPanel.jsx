@@ -5,7 +5,7 @@ import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
 import { FaShieldAlt, FaListUl, FaBoxOpen, FaUsers, FaTags, FaCommentAlt } from 'react-icons/fa';
 import React from 'react';
-import {PageHeader} from '../styles/SharedPageStyles';
+import {PageHeader,GlowingPageContainer} from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
 
 // Import modular sections
@@ -55,6 +55,7 @@ const AdminPanel = () => {
 
   return (
     <AppLayout>
+      <GlowingPageContainer $maxWidth="1100px">
       <AmbientBackground />
       <AdminContainer>
         <PageHeader 
@@ -108,7 +109,8 @@ const AdminPanel = () => {
             </SectionWrapper>
           )}
         </AnimatePresence>
-      </AdminContainer>
+        </AdminContainer>
+      </GlowingPageContainer>
     </AppLayout>
   );
 };
