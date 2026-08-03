@@ -15,7 +15,7 @@ from .email_service import send_welcome_email
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'phone']
+        fields = ['id', 'username', 'email', 'role', 'phone', 'profile_picture']
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -43,9 +43,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.ImageField(required=False)
     class Meta:
         model = User
-        fields = ['username', 'email', 'phone', 'role']
+        fields = ['id','username', 'email', 'phone', 'role', 'profile_picture']
+        read_only_fields = ['id']
+        extra_kwargs = {'email': {'required': False}, 'username': {'required': False}}
 
     def validate(self, data):
         if 'role' in data:
@@ -257,3 +260,44 @@ class AdminLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdminLog
         fields = '__all__'
+
+
+# serializers.py
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        # Custom claims added to token payload
+        token["username"] = user.username
+        token["email"] = user.email
+
+        return token
+
+    def validate(self, attrs):
+        # Run standard SimpleJWT validation (checks username/password)
+        super().validate(attrs)
+
+        # Generate tokens for the authenticated user
+        refresh = self.get_token(self.user)
+        access = refresh.access_token
+
+        # Build clean response data dictionary
+        data = {}
+        data["success"] = True
+        data["message"] = "Login successful. Tokens attached via cookies."
+        data["user"] = {
+            "id": self.user.id,
+            "username": self.user.username,
+            "email": self.user.email,
+        }
+        
+        # 🚀 Temporarily expose tokens here so CookieTokenObtainPairView can read them 
+        # before stripping them out of the final JSON body.
+        data["access"] = str(access)
+        data["refresh"] = str(refresh)
+
+        return data

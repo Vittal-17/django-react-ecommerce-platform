@@ -17,6 +17,7 @@ class User(AbstractUser):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     phone = models.CharField(max_length=20, blank=True, null=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username'] 

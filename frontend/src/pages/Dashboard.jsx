@@ -160,14 +160,24 @@ const Dashboard = () => {
   useEffect(() => { fetchOrders(); }, [orderPage, axiosInstance]);
 
   const fetchReviews = async () => {
+    if (!user?.id) {
+      setIsLoadingReviews(false); // 🚀 Turn off the loader if user isn't loaded yet
+      return;
+    }
+
     setIsLoadingReviews(true);
     try {
       const res = await axiosInstance.get(`/api/reviews/?user=${user.id}&page=${reviewPage}`);
       setUserReviews(res.data.results || res.data);
       if (res.data.count) setTotalReviewPages(Math.ceil(res.data.count / 12));
-    } catch (error) { toast.error('Failed to load reviews'); } 
-    finally { setIsLoadingReviews(false); }
-  };// eslint-disable-next-line
+    } catch (error) { 
+      toast.error('Failed to load reviews'); 
+    } finally { 
+      setIsLoadingReviews(false); 
+    }
+  };
+  
+  // eslint-disable-next-line
   useEffect(() => { fetchReviews(); }, [reviewPage, axiosInstance, user?.id]);
 
   const executeCancelOrder = async () => {

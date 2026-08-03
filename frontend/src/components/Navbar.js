@@ -107,7 +107,17 @@ const Navbar = () => {
                 
                 <UserDropdownContainer>
                   <UserButton onClick={toggleDropdown} $isOpen={isDropdownOpen}>
-                    <FaUser className="user-icon" /> 
+                    {/* 🚀 CLOUDINARY PROFILE PICTURE INTEGRATION IN NAVBAR */}
+                    <NavAvatarWrapper>
+                      {user?.profile_picture ? (
+                        <img src={user.profile_picture} alt={user.username || 'User'} />
+                      ) : user?.username ? (
+                        <span>{user.username.charAt(0).toUpperCase()}</span>
+                      ) : (
+                        <FaUser className="user-icon" />
+                      )}
+                    </NavAvatarWrapper>
+
                     <UsernameText>{user.username}</UsernameText> 
                     <motion.div animate={{ rotate: isDropdownOpen ? 180 : 0 }}>
                       <FaChevronDown size={12} />
@@ -123,8 +133,21 @@ const Navbar = () => {
                         transition={{ duration: 0.2, ease: "easeOut" }}
                       >
                         <UserInfo>
-                          <InfoItem><FaUser /> {user.username}</InfoItem>
-                          <InfoItem><FaEnvelope /> {user.email}</InfoItem>
+                          <UserInfoHeader>
+                            <NavAvatarWrapper style={{ width: '38px', height: '38px', fontSize: '1rem' }}>
+                              {user?.profile_picture ? (
+                                <img src={user.profile_picture} alt={user.username || 'User'} />
+                              ) : user?.username ? (
+                                <span>{user.username.charAt(0).toUpperCase()}</span>
+                              ) : (
+                                <FaUser />
+                              )}
+                            </NavAvatarWrapper>
+                            <UserInfoText>
+                              <span className="username">{user.username}</span>
+                              <span className="email"><FaEnvelope size={11} /> {user.email}</span>
+                            </UserInfoText>
+                          </UserInfoHeader>
                         </UserInfo>
                         
                         <DropdownButton onClick={() => navigate('/dashboard')}>
@@ -202,7 +225,7 @@ const NavContainer = styled(motion.div)`
   margin: 0 auto;
   width: calc(100% - 2.5rem);
   max-width: 1450px;
-  min-height: 68px; /* Uses min-height instead of a locked height to prevent clipping */
+  min-height: 68px;
   border-radius: 24px;
   box-sizing: border-box;
   z-index: 1000;
@@ -217,13 +240,12 @@ const NavContainer = styled(motion.div)`
   box-shadow: ${props => props.$isScrolled ? '0 15px 40px -10px rgba(11, 132, 87, 0.25)' : '0 10px 30px rgba(11, 132, 87, 0.1)'};
   transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 
-  /* 🚀 Mobile Layout Fixes */
   @media (max-width: 768px) {
     top: 10px;
-    width: calc(100% - 1rem); /* Takes up more width on mobile screens to give content room */
+    width: calc(100% - 1rem);
     min-height: 58px;
     border-radius: 18px;
-    padding: 0 0.75rem; /* Safe internal breathing room */
+    padding: 0 0.75rem;
   }
 `;
 
@@ -234,7 +256,7 @@ const NavContent = styled.div`
   box-sizing: border-box;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2rem; /* You can even bump this to 2rem now for better breathing room! */
+  padding: 0 2rem;
   
   @media (max-width: 768px) { padding: 0 1rem; }
 `;
@@ -310,6 +332,29 @@ const NavLink = styled(motion(Link))`
 
 const UserDropdownContainer = styled.div` position: relative; `;
 
+/* 🚀 NAVBAR AVATAR WRAPPER COMPONENT */
+const NavAvatarWrapper = styled.div`
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(11, 132, 87, 0.25);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+
 const UserButton = styled(motion.button)`
   background: ${props => props.$isOpen ? 'rgba(11, 132, 87, 0.08)' : 'transparent'};
   border: 1px solid ${props => props.$isOpen ? 'rgba(11, 132, 87, 0.2)' : 'transparent'};
@@ -320,7 +365,7 @@ const UserButton = styled(motion.button)`
   font-weight: 600;
   color: #0B8457;
   cursor: pointer;
-  padding: 0.4rem 0.8rem;
+  padding: 0.35rem 0.8rem;
   border-radius: 50px;
   transition: all 0.2s ease;
 
@@ -328,9 +373,8 @@ const UserButton = styled(motion.button)`
 
   &:hover { background: rgba(11, 132, 87, 0.08); }
 
-  /* 🚀 Shrink padding and gaps on mobile to prevent overflow */
   @media (max-width: 768px) {
-    padding: 0.3rem 0.5rem;
+    padding: 0.25rem 0.5rem;
     font-size: 0.85rem;
     gap: 0.3rem;
   }
@@ -342,7 +386,6 @@ const UsernameText = styled.span`
   overflow: hidden; 
   text-overflow: ellipsis;
 
-  /* 🚀 Completely hide the username text on tiny screens to save horizontal space for the hamburger menu */
   @media (max-width: 480px) {
     display: none; 
   }
@@ -353,7 +396,6 @@ const UsernameText = styled.span`
 `;
 
 const DropdownMenu = styled(motion.div)`
-  /* 🚀 DESKTOP: Anchors perfectly to the bottom-right of the user button */
   position: absolute;
   right: 0;
   top: calc(100% + 1rem);
@@ -371,36 +413,57 @@ const DropdownMenu = styled(motion.div)`
   gap: 0.5rem;
   box-sizing: border-box;
 
-  /* 🚀 MOBILE: Detaches from the button and centers flawlessly on the screen */
   @media (max-width: 768px) {
     position: fixed; 
-    top: 85px; /* Drops it cleanly just below your mobile navbar */
+    top: 85px; 
     left: 0;
     right: 0;
-    margin: 0 auto; /* This magic combo perfectly centers fixed elements */
-    width: 92vw; /* Takes up a beautiful, symmetrical 92% of the phone screen */
+    margin: 0 auto; 
+    width: 92vw; 
     max-width: 340px; 
   }
 `;
 
-const UserInfo = styled.div` display: flex; flex-direction: column; gap: 0.8rem; padding-bottom: 0.5rem; `;
-const InfoItem = styled.div`
-  display: flex; 
-  align-items: center; 
-  gap: 0.8rem; 
-  color: #4B5563; 
-  font-size: 0.90rem; 
-  font-weight: 500; 
-  
-  /* 🚀 Fix long email overflow clipping inside the dropdown */
-  width: 100%;
-  white-space: nowrap; 
-  overflow: hidden; 
-  text-overflow: ellipsis;
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #F1F5F9;
+  margin-bottom: 0.25px;
+`;
 
-  svg { 
-    color: #0B8457; 
-    min-width: 16px; 
+const UserInfoHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+`;
+
+const UserInfoText = styled.div`
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: calc(100% - 46px);
+
+  .username {
+    color: #0F172A;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .email {
+    color: #64748B;
+    font-size: 0.82rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -448,7 +511,6 @@ const MobileToggleButton = styled.button`
   @media (min-width: 900px) { display: none; }
 `;
 
-/* 🚀 UPGRADED FLOATING MOBILE MENU */
 const MobileMenuContainer = styled(motion.div)`
   width: 100%;
   background: rgba(255, 255, 255, 0.95);
@@ -458,7 +520,7 @@ const MobileMenuContainer = styled(motion.div)`
   border-radius: 24px;
   box-shadow: 0 20px 40px rgba(0,0,0,0.15);
   position: absolute;
-  top: calc(100% + 15px); /* Floats exactly 15px below the pill navbar */
+  top: calc(100% + 15px);
   left: 0;
   @media (min-width: 900px) { display: none; }
 `;

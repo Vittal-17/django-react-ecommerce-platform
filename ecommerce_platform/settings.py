@@ -16,6 +16,7 @@ from decouple import config
 import dj_database_url
 import os
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -35,6 +36,8 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1'
 ]
+
+CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_ALL_ORIGINS = False
 
@@ -63,9 +66,12 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'django_filters',
     'anymail',
+    'cloudinary_storage',
+    'cloudinary',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -74,7 +80,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -114,14 +120,16 @@ DATABASES = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # 🚀 Tells DRF to read the JWT from your HTTP-Only cookies instead of headers
+        'api.authenticate.CustomCookieAuthentication',
+        
+        # Keep TokenAuthentication if you use it for other apps/tokens
         'rest_framework.authentication.TokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ]
 }
-
 
 
 AUTH_USER_MODEL = 'api.User'
@@ -172,8 +180,19 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=2),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    # 🚀 Secure access lifetime (forces frequent permission checks without nagging the user)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),
+    
+    # 🚀 Long refresh lifetime so users don't have to log in every day
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    
+    # Keep rotation/blacklisting turned off since you aren't using the blacklist app
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -189,3 +208,14 @@ ANYMAIL = {
 
 EMAIL_BACKEND = "anymail.backends.sendinblue.EmailBackend"
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
+
+os.environ['CLOUDINARY_URL'] = config('CLOUDINARY_URL')
+
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}

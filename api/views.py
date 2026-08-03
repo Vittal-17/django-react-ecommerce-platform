@@ -8,6 +8,8 @@ from datetime import date
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from rest_framework import viewsets, generics, status, serializers
 from rest_framework.response import Response
@@ -19,7 +21,7 @@ from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import permissions
 from .permissions import IsSellerAdminOrReadOnly, IsSellerOrAdmin, IsAdminUser
@@ -32,10 +34,11 @@ from .serializers import (
     UserSerializer, RegisterSerializer, UserProfileUpdateSerializer, ChangePasswordSerializer,
     CategorySerializer, ProductSerializer, OrderSerializer, OrderItemSerializer,
     ReviewSerializer, WishlistSerializer, CartSerializer, CartItemSerializer,
-    CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer
+    CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer,CustomTokenObtainPairSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
 from .email_service import send_order_email,send_otp_email,send_vendor_new_order_email,send_vendor_product_status_email, async_notify_cancellation
+
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 12 
@@ -60,6 +63,9 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
     pagination_class = StandardResultsSetPagination
+    parser_classes = [MultiPartParser, FormParser]
+
+    
     def get_serializer_class(self):
         if self.action in ['update', 'partial_update']:
             return UserProfileUpdateSerializer
@@ -184,25 +190,82 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = []
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    username_field = User.EMAIL_FIELD
-    def validate(self, attrs):
-        email = attrs.get("email")
-        password = attrs.get("password")
-        user = authenticate(request=self.context.get('request'), username=email, password=password)
-        if not user:
-            raise serializers.ValidationError("Invalid email or password")
-        refresh = self.get_token(user)
-        return {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': {
-                'id': user.id, 'email': user.email, 'username': user.username, 'role': user.role,
-            },
-        }
-
-class CustomTokenObtainPairView(TokenObtainPairView):
+class CookieTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            access_token = response.data.get('access')
+            refresh_token = response.data.get('refresh')
+            
+            if access_token and refresh_token:
+                # 🚀 Set Access Cookie (HttpOnly)
+                response.set_cookie(
+                    key='access_token',
+                    value=access_token,
+                    httponly=True,
+                    secure=False,  # Set to True in Production (HTTPS)
+                    samesite='Lax',
+                    max_age=300    # 5 minutes
+                )
+                
+                # 🚀 Set Refresh Cookie (HttpOnly)
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=False,
+                    samesite='Lax',
+                    max_age=86400  # 1 day
+                )
+                
+                # 🚀 Strip raw tokens out of the JSON body so they are hidden from JavaScript
+                del response.data['access']
+                del response.data['refresh']
+                
+        return response
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        # Pull the refresh token from the cookie
+        refresh_token = request.COOKIES.get('refresh_token')
+        
+        if refresh_token:
+            request.data['refresh'] = refresh_token
+            
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            access_token = response.data.get('access')
+            
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                max_age=300
+            )
+            
+            del response.data['access']
+            
+        return response
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        response = Response({"success": True, "message": "Logged out successfully."})
+        
+        # This tells the browser to wipe the HTTP-Only cookies
+        response.delete_cookie('access_token', path='/', samesite='Lax')
+        response.delete_cookie('refresh_token', path='/', samesite='Lax')
+        
+        return response
 
 
 # ==========================================

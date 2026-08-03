@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     UserViewSet, CategoryViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet,
     ReviewViewSet, WishlistViewSet, CouponViewSet, PaymentViewSet, AdminLogViewSet,
-    CartViewSet, CartItemViewSet, RegisterView, CustomTokenObtainPairView,AddressViewSet,VendorSalesViewSet
+    CartViewSet, CartItemViewSet, RegisterView,AddressViewSet,VendorSalesViewSet,CookieTokenObtainPairView,CookieTokenRefreshView,LogoutView
 )
 
 # Public API router
@@ -34,6 +34,7 @@ urlpatterns = [
     path('', include(router.urls)),  # public API
     path('secure/api/', include(admin_router.urls)),  # protected admin-only API for React
     path('register/', RegisterView.as_view(), name='register'),
-    path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), 
+    path('token/', CookieTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'), 
+    path('logout/', LogoutView.as_view(), name='logout'),
 ]

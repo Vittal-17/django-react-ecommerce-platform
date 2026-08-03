@@ -1,125 +1,166 @@
+// AuthContext.jsx
 import { createContext, useEffect, useState, useMemo } from 'react';
-import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
 const AuthContext = createContext();
+
+// ==========================================
+// 🚀 AXIOS REFRESH QUEUE STATE (Placed outside to persist across renders)
+// ==========================================
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [authTokens, setAuthTokens] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  // 1. INITIALIZE USE-NAVIGATE
+
   const navigate = useNavigate();
 
-  // 2. CREATE AXIOS INSTANCE FIRST (So useEffect can use it)
+  // 1. CREATE AXIOS INSTANCE WITH COOKIE CREDENTIALS
   const axiosInstance = useMemo(() => {
-    const instance = axios.create({ baseURL: API_URL });
-
-    instance.interceptors.request.use(async (config) => {
-      const access = localStorage.getItem('access');
-      const refresh = localStorage.getItem('refresh');
-
-      if (access) {
-        const decoded = jwtDecode(access);
-        const isExpired = decoded.exp * 1000 < Date.now();
-
-        if (isExpired && refresh) {
-          try {
-            const response = await axios.post(`${API_URL}/api/token/refresh/`, { refresh });
-            localStorage.setItem('access', response.data.access);
-            config.headers.Authorization = `Bearer ${response.data.access}`;
-          } catch (refreshErr) {
-            console.error('Token refresh failed:', refreshErr);
-            // Optional: If refresh token dies, you can wipe storage here too
-          }
-        } else {
-          config.headers.Authorization = `Bearer ${access}`;
-        }
-      }
-      return config;
+    const instance = axios.create({
+      baseURL: API_URL,
+      withCredentials: true, // 🚀 Automatically attaches HTTP-Only cookies
     });
 
-    return instance;
-  }, []);
+    // Response Interceptor for 401 Silent Refresh & Session Expiration
+    instance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
 
-  // 3. HYDRATION AND 401 INTERCEPTOR
-  useEffect(() => {
-    const token = localStorage.getItem('access');
-    const refresh = localStorage.getItem('refresh');
-    const storedUser = localStorage.getItem('user');
+        // If 401 Unauthorized and we haven't retried yet
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          
+          // 🚀 STAMPEDE FIX: IF REFRESH IS IN PROGRESS, QUEUE THE REQUEST
+          if (isRefreshing) {
+            return new Promise(function(resolve, reject) {
+              failedQueue.push({ resolve, reject });
+            }).then(() => {
+              return instance(originalRequest);
+            }).catch(err => {
+              return Promise.reject(err);
+            });
+          }
 
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      setAuthTokens({ access: token, refresh });
-    }
-    setLoading(false);
+          // Lock the queue
+          originalRequest._retry = true;
+          isRefreshing = true;
 
-    const interceptor = axiosInstance.interceptors.response.use(
-      (response) => response, 
-      (error) => {
-        if (error.response && error.response.status === 401) {
-          localStorage.removeItem('access');
-          localStorage.removeItem('refresh');
-          localStorage.removeItem('user');
-          
-          setUser(null);
-          setAuthTokens(null);
-          
-          toast.error('⏳ Session Expired, Please Log in Again', {
-            duration: 4000,
-          });
-          
-          navigate('/login');
+          try {
+            // 🚀 Hit refresh endpoint
+            await instance.post('/api/token/refresh/');
+            
+            // Unlock queue and process waiting requests
+            processQueue(null);
+            
+            // Backend set new access_token cookie; retry original request
+            return instance(originalRequest);
+          } catch (refreshErr) {
+            // If refresh fails, reject queue and log out
+            processQueue(refreshErr, null);
+            
+            localStorage.removeItem('user');
+            setUser(null);
+
+            toast.error('⏳ Session Expired, Please Log in Again', {
+              duration: 4000,
+            });
+
+            navigate('/login');
+            return Promise.reject(refreshErr);
+          } finally {
+            // Reset the lock when done
+            isRefreshing = false;
+          }
         }
         return Promise.reject(error);
       }
     );
 
-    return () => {
-      axiosInstance.interceptors.response.eject(interceptor);
-    };
-  }, [navigate, axiosInstance]);
+    return instance;
+  }, [navigate]);
 
+  // 2. HYDRATION ON MOUNT
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const storedUser = localStorage.getItem('user');
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+
+          // Self-healing check: fetch fresh data using the correct ID endpoint
+          if (!parsedUser.profile_picture && parsedUser.id) {
+            const response = await axiosInstance.get(`/api/users/${parsedUser.id}/`);
+            setUser(response.data);
+            localStorage.setItem('user', JSON.stringify(response.data));
+          } else {
+            setUser(parsedUser);
+          }
+        } catch (error) {
+          console.error('Session initialization error:', error);
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+  }, [axiosInstance]);
+
+  // 3. LOGIN USER METHOD
   const loginUser = async (email, password) => {
     try {
-      const res = await axios.post(`${API_URL}/api/token/`, { email, password });
-      
-      if (res.status === 200) {
-        const { access, refresh, user: userData } = res.data;
+      // 🚀 Include credentials so set-cookie headers are accepted by browser
+      const res = await axios.post(
+        `${API_URL}/api/token/`,
+        { email, password },
+        { withCredentials: true }
+      );
 
-        localStorage.setItem('access', access);
-        localStorage.setItem('refresh', refresh);
+      if (res.status === 200) {
+        const { user: userData } = res.data;
+
+        // Store ONLY non-sensitive user metadata in localStorage for UI state
         localStorage.setItem('user', JSON.stringify(userData));
-        
-        setAuthTokens({ access, refresh });
         setUser(userData);
 
         // ==========================================
-        // THE MERGE ALGORITHM
+        // THE MERGE ALGORITHM (UPDATED FOR COOKIES)
         // ==========================================
         const tempCart = JSON.parse(localStorage.getItem('tempCart')) || [];
-        
+
         if (tempCart.length > 0) {
           toast('Syncing your guest cart...', { icon: '🔄' });
-          
+
           for (const item of tempCart) {
             try {
-              // FIX 1 & 2: Correct endpoint (/cart-items/) and correct payload (product: item.product)
-              await axios.post(`${API_URL}/api/cart-items/`, {
-                product: item.product, 
-                quantity: item.quantity
-              }, {
-                headers: { Authorization: `Bearer ${access}` }
+              // 🚀 Uses axiosInstance withCredentials—no manual Authorization header needed!
+              await axiosInstance.post('/api/cart-items/', {
+                product: item.product,
+                quantity: item.quantity,
               });
             } catch (err) {
               console.error(`Failed to sync product ${item.product}`, err);
             }
           }
-          
+
           localStorage.removeItem('tempCart');
           toast.success('✨ Cart synced successfully!');
         }
@@ -132,14 +173,22 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
-  const logoutUser = () => {
-    setUser(null);
-    setAuthTokens(null);
-    localStorage.clear(); 
+  // 4. LOGOUT USER METHOD
+  const logoutUser = async () => {
+    try {
+      // Notify backend to clear HTTP-Only cookies
+      await axiosInstance.post('/api/logout/');
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('user');
+      navigate('/login');
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, authTokens, loginUser, logoutUser, axiosInstance }}>
+    <AuthContext.Provider value={{ user, loginUser, logoutUser, axiosInstance }}>
       {!loading && children}
     </AuthContext.Provider>
   );

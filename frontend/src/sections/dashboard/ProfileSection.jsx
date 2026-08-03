@@ -1,8 +1,8 @@
 // src/sections/dashboard/ProfileSection.jsx
 import { useState, useContext, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaUserShield, FaLock, FaPhoneAlt, FaTimes } from 'react-icons/fa';
+import { FaUserShield, FaLock, FaPhoneAlt, FaTimes, FaCamera, FaSpinner } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import AuthContext from '../../context/AuthContext';
 import AddressSection from './AddressSection';
@@ -44,8 +44,9 @@ const SecureProcessingOverlay = ({ isVisible, mode }) => {
 };
 
 const ProfileSection = ({ addresses, setAddresses }) => {
-  const { user, axiosInstance } = useContext(AuthContext);
+  const { user, setUser, axiosInstance } = useContext(AuthContext); 
   const [localPhone, setLocalPhone] = useState('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -85,6 +86,42 @@ const ProfileSection = ({ addresses, setAddresses }) => {
     const match = digits.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
     if (!match) return val;
     return !match[2] ? match[1] : `(${match[1]}) ${match[2]}${match[3] ? `-${match[3]}` : ''}`;
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('profile_picture', file);
+
+    setIsUploadingAvatar(true);
+    try {
+      const response = await axiosInstance.patch(`/api/users/${user.id}/`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      // 🔍 DIAGNOSTIC LOG: Let's see exactly what Django is sending back
+      console.log("Django Response:", response.data);
+
+      toast.success('✨ Profile picture updated successfully!');
+      
+      // 🚀 THE UNBREAKABLE MERGE
+      const updatedUser = { 
+        ...user, 
+        ...(response.data || {}), 
+        id: user.id // <-- AT THE END: Forces the ID to stay exactly what it was before the upload
+      };
+
+      if (setUser) setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+    } catch (err) {
+      console.error('Upload failed:', err);
+      toast.error('❌ Failed to upload profile picture.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleVerifyCurrentPassword = async () => {
@@ -297,7 +334,27 @@ const ProfileSection = ({ addresses, setAddresses }) => {
       {/* --- MAIN PROFILE VIEW --- */}
       <ProfileCard>
         <ProfileHeader>
-          <Avatar>{user?.username?.charAt(0).toUpperCase()}</Avatar>
+          <AvatarContainer htmlFor="avatar-upload">
+            {user?.profile_picture ? (
+              <img src={user.profile_picture} alt="Avatar" />
+            ) : (
+              <span>{user?.username?.charAt(0).toUpperCase()}</span>
+            )}
+            
+            <HoverOverlay className={isUploadingAvatar ? 'uploading' : ''}>
+              {isUploadingAvatar ? <SpinningIcon /> : <FaCamera size={24} />}
+            </HoverOverlay>
+            
+            <input
+              id="avatar-upload"
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleAvatarChange}
+              disabled={isUploadingAvatar}
+            />
+          </AvatarContainer>
+
           <div><h2>{user?.username}</h2><p>{user?.email}</p></div>
         </ProfileHeader>
         
@@ -331,6 +388,16 @@ export default ProfileSection;
 // SAAS LEVEL STYLED COMPONENTS
 // ==========================================
 
+const spin = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
+
+const SpinningIcon = styled(FaSpinner)`
+  animation: ${spin} 1s linear infinite;
+  font-size: 24px;
+`;
+
 const ProfileGrid = styled.div` 
   display: grid; grid-template-columns: 1fr; gap: 2rem; 
   @media (min-width: 900px) { grid-template-columns: 1fr 1.2fr; } 
@@ -346,8 +413,54 @@ const ProfileHeader = styled.div`
   p { margin: 0; color: #64748B; font-size: 0.95rem; } 
 `;
 
-const Avatar = styled.div` 
-  width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%); color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 900; box-shadow: 0 8px 20px rgba(11, 132, 87, 0.25);
+const HoverOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  
+  &.uploading {
+    opacity: 1;
+    background: rgba(11, 132, 87, 0.7);
+  }
+`;
+
+const AvatarContainer = styled.label` 
+  position: relative;
+  width: 75px; 
+  height: 75px; 
+  border-radius: 50%; 
+  background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%); 
+  color: white; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  font-size: 2rem; 
+  font-weight: 900; 
+  box-shadow: 0 8px 20px rgba(11, 132, 87, 0.25);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.2s;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &:hover {
+    transform: scale(1.05);
+  }
+
+  &:hover ${HoverOverlay}:not(.uploading) {
+    opacity: 1;
+  }
 `;
 
 const SettingRow = styled.div` 
@@ -378,7 +491,6 @@ const Overlay = styled(motion.div)`
   z-index: 1000; 
   padding: 1rem; 
   flex-direction: column; 
-  /* 🚀 FIX: Ensures the overlay's padding doesn't push elements off-screen */
   box-sizing: border-box; 
 `;
 
@@ -392,14 +504,11 @@ const ModalCard = styled(motion.div)`
   text-align: center; 
   box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); 
   border: 1px solid rgba(11, 132, 87, 0.1);
-  
-  /* 🚀 CRITICAL FIX: Forces padding to stay inside the 100% width boundary */
   box-sizing: border-box; 
   
   h3 { margin: 0 0 0.5rem 0; color: #0F172A; font-size: 1.5rem; font-weight: 800; } 
   p { color: #64748B; margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5; }
 
-  /* 🚀 MOBILE FIX: Shrink the massive desktop padding so the modal fits perfectly on phones */
   @media (max-width: 768px) {
     padding: 1.5rem 1.25rem;
     border-radius: 20px;
