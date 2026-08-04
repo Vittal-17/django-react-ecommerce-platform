@@ -1,11 +1,23 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+
 # Explicit imports are safer than *
 from .models import (
-    User, Category, Product, Order, OrderItem, 
-    Review, Wishlist, Coupon, Payment, AdminLog, 
-    Cart, CartItem, Address
+    Address,
+    AdminLog,
+    Cart,
+    CartItem,
+    Category,
+    Coupon,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Review,
+    User,
+    Wishlist,
 )
+
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):

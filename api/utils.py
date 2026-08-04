@@ -1,5 +1,7 @@
-from .models import AdminLog
 from django.utils import timezone
+
+from .models import AdminLog
+
 
 def log_admin_action(admin_user, action_description):
     """

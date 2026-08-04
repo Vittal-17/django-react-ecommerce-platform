@@ -1,8 +1,22 @@
+from decimal import Decimal
+
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
-from django.core.cache import cache
-from .models import User, Product, Order, OrderItem, Review, Category, Address, AdminLog, CartItem, Cart, Wishlist, Coupon
-from decimal import Decimal
+
+from .models import (
+    Address,
+    AdminLog,
+    Cart,
+    CartItem,
+    Category,
+    Order,
+    OrderItem,
+    Product,
+    Review,
+    User,
+)
+
 
 class EazyShopTitaniumTestSuite(APITestCase):
     def setUp(self):

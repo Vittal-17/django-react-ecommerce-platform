@@ -1,44 +1,88 @@
+# views.py
 import random
-import time
 import threading
-from django.db import transaction, IntegrityError
-from django.db.models import Q
-from django.core.cache import cache
+import time
 from datetime import date
-from django.contrib.auth import authenticate
-from django.core.mail import send_mail
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
 
-from rest_framework import viewsets, generics, status, serializers
+from django.conf import settings
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.db import IntegrityError, transaction
+
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
-from rest_framework.exceptions import ValidationError
+from django.http import FileResponse
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from .utils.pdf_generator import generate_invoice_pdf
 
 # 🚨 THE UPGRADE: Enterprise Filtering & Search
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework import generics, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import permissions
-from .permissions import IsSellerAdminOrReadOnly, IsSellerOrAdmin, IsAdminUser
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from .email_service import (
+    async_notify_cancellation,
+    send_order_email,
+    send_otp_email,
+    send_vendor_new_order_email,
+    async_notify_vendors
+)
 from .models import (
-    User, Category, Product, Order, OrderItem, Review, 
-    Wishlist, Cart, CartItem, Coupon, Payment, AdminLog, Address
+    Address,
+    AdminLog,
+    Cart,
+    CartItem,
+    Category,
+    Coupon,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Review,
+    User,
+    Wishlist,
+)
+from .permissions import (
+    IsAdminOrOwner,
+    IsAdminUser,
+    IsOwnerOrReadOnly,
+    IsSellerAdminOrReadOnly,
+    IsSellerOrAdmin,
 )
 from .serializers import (
-    UserSerializer, RegisterSerializer, UserProfileUpdateSerializer, ChangePasswordSerializer,
-    CategorySerializer, ProductSerializer, OrderSerializer, OrderItemSerializer,
-    ReviewSerializer, WishlistSerializer, CartSerializer, CartItemSerializer,
-    CouponSerializer, PaymentSerializer, AdminLogSerializer, AddressSerializer,CustomTokenObtainPairSerializer
+    AddressSerializer,
+    AdminLogSerializer,
+    CartItemSerializer,
+    CartSerializer,
+    CategorySerializer,
+    ChangePasswordSerializer,
+    CouponSerializer,
+    CustomTokenObtainPairSerializer,
+    OrderItemSerializer,
+    OrderSerializer,
+    PaymentSerializer,
+    ProductSerializer,
+    RegisterSerializer,
+    ReviewSerializer,
+    UserProfileUpdateSerializer,
+    UserSerializer,
+    WishlistSerializer,
 )
-from .permissions import IsOwnerOrReadOnly, IsAdminOrOwner, IsOwnerOrAdmin
-from .email_service import send_order_email,send_otp_email,send_vendor_new_order_email,send_vendor_product_status_email, async_notify_cancellation
 
+User = get_user_model()
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 12 
@@ -105,17 +149,12 @@ class UserViewSet(viewsets.ModelViewSet):
         cache.set(count_key, otp_count + 1, timeout=86400)    # Increment daily count (expires in 24h)
         cache.set(cooldown_key, True, timeout=60)             # Lock the endpoint for 60 seconds
 
-        # 5. Send the Email (Using your existing email logic)
-        subject = "Your EazyShop Security Code"
-        body = f"Hello {user.username},\n\nYour security code is: {otp}\n\nThis code expires in 5 minutes.\n\nNever share this code with anyone."
-        
+        # 5. Send the Email
         try:
             send_otp_email(to_email=user.email, username=user.username, otp=otp)
             return Response({"message": f"OTP sent to {user.email}"}, status=status.HTTP_200_OK)
         except Exception as e:
-            # If email fails, immediately remove the cooldown so they can try again
-            print(f"\n[OTP EMAIL ERROR] ❌ {str(e)}\n")
-
+            print(f"\n[OTP EMAIL ERROR] ❌ {e!s}\n")
             cache.delete(cooldown_key)
             return Response({"error": "Failed to send email. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -166,10 +205,12 @@ class UserViewSet(viewsets.ModelViewSet):
         else:
             return Response({"error": "Incorrect current password."}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Address.objects.all()
+    queryset = Address.exceptions if hasattr(Address, 'exceptions') else Address.objects.all()
+    
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user)
 
@@ -185,10 +226,12 @@ class AddressViewSet(viewsets.ModelViewSet):
         if instance.is_default:
             Address.objects.filter(user=self.request.user).exclude(id=instance.id).update(is_default=False)
 
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = []
+
 
 class CookieTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -201,27 +244,22 @@ class CookieTokenObtainPairView(TokenObtainPairView):
             refresh_token = response.data.get('refresh')
             
             if access_token and refresh_token:
-                # 🚀 Set Access Cookie (HttpOnly)
                 response.set_cookie(
                     key='access_token',
                     value=access_token,
                     httponly=True,
-                    secure=False,  # Set to True in Production (HTTPS)
+                    secure=False,
                     samesite='Lax',
-                    max_age=300    # 5 minutes
+                    max_age=300
                 )
-                
-                # 🚀 Set Refresh Cookie (HttpOnly)
                 response.set_cookie(
                     key='refresh_token',
                     value=refresh_token,
                     httponly=True,
                     secure=False,
                     samesite='Lax',
-                    max_age=86400  # 1 day
+                    max_age=86400
                 )
-                
-                # 🚀 Strip raw tokens out of the JSON body so they are hidden from JavaScript
                 del response.data['access']
                 del response.data['refresh']
                 
@@ -230,9 +268,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
 class CookieTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
-        # Pull the refresh token from the cookie
         refresh_token = request.COOKIES.get('refresh_token')
-        
         if refresh_token:
             request.data['refresh'] = refresh_token
             
@@ -240,7 +276,6 @@ class CookieTokenRefreshView(TokenRefreshView):
         
         if response.status_code == 200:
             access_token = response.data.get('access')
-            
             response.set_cookie(
                 key='access_token',
                 value=access_token,
@@ -249,7 +284,6 @@ class CookieTokenRefreshView(TokenRefreshView):
                 samesite='Lax',
                 max_age=300
             )
-            
             del response.data['access']
             
         return response
@@ -260,11 +294,8 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({"success": True, "message": "Logged out successfully."})
-        
-        # This tells the browser to wipe the HTTP-Only cookies
         response.delete_cookie('access_token', path='/', samesite='Lax')
         response.delete_cookie('refresh_token', path='/', samesite='Lax')
-        
         return response
 
 
@@ -292,8 +323,9 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance.delete()
         log_admin_action(self.request.user, f"Deleted category: '{name}'")
 
+
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all() # 🚀 THE FIX: Keeps the URL Router happy
+    queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [IsSellerAdminOrReadOnly] 
     pagination_class = StandardResultsSetPagination 
@@ -307,17 +339,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Product.objects.select_related('category', 'vendor')
         
-        # 1. ADMIN PANEL: Admins see absolutely everything
         if user.is_authenticated and getattr(user, 'role', '') == 'admin':
             return queryset.all()
             
-        # 2. VENDOR DASHBOARD: Sellers explicitly fetching their own catalog
         vendor_param = self.request.query_params.get('vendor')
         if user.is_authenticated and getattr(user, 'role', '') == 'seller' and vendor_param == str(user.id):
             return queryset.filter(vendor=user)
             
-        # 3. PUBLIC STOREFRONT: Everyone else (Guests, Users, and Sellers browsing the store)
-        # ONLY return active, fully approved products!
         return queryset.filter(approval_status='approved', is_active=True)
 
     def perform_create(self, serializer):
@@ -374,8 +402,10 @@ class OrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         order = serializer.save(user=self.request.user)
         self.send_order_status_email(order)
-        # 🚀 Trigger emails to the vendors who own the products
-        self.notify_vendors_async(order)
+        
+        # 🚀 FIX: Call the centralized, consolidated email function from email_service.py
+        async_notify_vendors(order)
+        
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
     def perform_update(self, serializer):
@@ -384,9 +414,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         new_instance = serializer.save()
         
         if old_status != new_instance.status:
-            # 🚀 CASCADE STATUS SYNC: Instantly update all related vendor items!
             new_instance.order_items.update(status=new_instance.status)
-            
             log_admin_action(self.request.user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
             self.send_order_status_email(new_instance)
 
@@ -397,7 +425,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         try:
             order = Order.objects.get(id=order_id)
             payment = None
-            
             for _ in range(5):
                 payment = Payment.objects.filter(order=order).first()
                 if payment: break
@@ -410,44 +437,20 @@ class OrderViewSet(viewsets.ModelViewSet):
                 payment_method_display = "Pending Payment"
                 transaction_id_display = "Awaiting System Confirmation"
             
-            subject = f"ShopEazy Update: Order #{order.id} is now {order.status.capitalize()}"
-            body = f"Hello {order.user.username},\n\nThere is an update on your ShopEazy order #{order.id}.\nStatus: {order.status.upper()}\nTotal: ${order.total_price}\n\nPayment: {payment_method_display}\nTransaction ID: {transaction_id_display}\n\nDelivery to: {order.shipping_address or 'Saved Address'}\n\nThank you!"
-            
             send_order_email(
-    to_email=order.user.email,
-    username=order.user.username,
-    order_id=order.id,
-    status=order.status,
-    total=order.total_price,
-    payment_method=payment_method_display,
-    txn_id=transaction_id_display,
-    address=order.shipping_address or 'Saved Address'
-)
+                to_email=order.user.email,
+                username=order.user.username,
+                order_id=order.id,
+                status=order.status,
+                total=order.total_price,
+                payment_method=payment_method_display,
+                txn_id=transaction_id_display,
+                address=order.shipping_address or 'Saved Address'
+            )
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
+            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
-
-    def notify_vendors_async(self, order):
-        """Spins up a thread to email vendors about their sales using premium HTML templates"""
-        def send_emails():
-            for item in order.order_items.all():
-                if item.vendor:
-                    try:
-                        # 🚀 Trigger the new premium HTML vendor email!
-                        send_vendor_new_order_email(
-                            to_email=item.vendor.email,
-                            username=item.vendor.username,
-                            order_id=order.id,
-                            product_name=item.product.name,
-                            quantity=item.quantity,
-                            earnings=item.seller_earnings,
-                            customer_name=order.user.username,
-                            address=order.shipping_address or 'Saved Address'
-                        )
-                    except Exception as e:
-                        print(f"Failed to notify vendor {item.vendor.email}: {e}")
-        
-        threading.Thread(target=send_emails).start()
+    # 🚀 REMOVED: The old self.notify_vendors_async loop has been completely deleted!
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -459,7 +462,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.status = 'cancelled'
             order.save()
             
-            # 🚀 1. Restore stock AND update individual vendor order item statuses to cancelled
             for item in order.order_items.all():
                 item.status = 'cancelled'
                 item.save()
@@ -472,28 +474,10 @@ class OrderViewSet(viewsets.ModelViewSet):
         if getattr(request.user, 'role', '') == 'admin':
             log_admin_action(request.user, f"Cancelled Order #{order.id}")
             
-        # 2. Email the customer about the cancellation
         self.send_order_status_email(order)
-
         async_notify_cancellation(order)
-        # 🚀 3. Alert the affected vendors in the background
-        #self.notify_vendors_of_cancellation_async(order)
         
         return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
-
-    def notify_vendors_of_cancellation_async(self, order):
-        """Spins up a thread to notify vendors that an order was cancelled"""
-        def send_cancellation_emails():
-            for item in order.order_items.all():
-                if item.vendor:
-                    subject = f"Notice: Order #{order.id} has been Cancelled"
-                    body = f"Hello {item.vendor.username},\n\nOrder #{order.id} containing your product '{item.product.name}' has been cancelled by the customer. Please do not fulfill this item.\n\nEazyShop Team"
-                    try:
-                        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [item.vendor.email])
-                    except Exception as e:
-                        print(f"Failed to notify vendor {item.vendor.email} of cancellation: {e}")
-        
-        threading.Thread(target=send_cancellation_emails).start()
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):
@@ -512,13 +496,13 @@ class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
     queryset = Cart.objects.all()
+    
     def get_queryset(self):
-        # 🚨 MASSIVE N+1 FIX: prefetch_related('items__product') stops the database from
-        # pinging the server for every single product inside the cart.
         return Cart.objects.prefetch_related('items__product').filter(user=self.request.user)
         
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
 
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
@@ -549,11 +533,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         queryset = Review.objects.select_related('user', 'product').all().order_by('-id')
-
-        # 🚀 SECURITY & SCOPING: If the user is a seller, restrict reviews to only their products.
         if getattr(user, 'role', '') == 'seller':
             queryset = queryset.filter(product__vendor=user)
-
         return queryset
 
     def get_permissions(self):
@@ -572,12 +553,13 @@ class ReviewViewSet(viewsets.ModelViewSet):
         instance.delete()
         log_admin_action(self.request.user, f"Deleted {review_info}")
 
+
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
     permission_classes = [IsAuthenticated]
     queryset = Wishlist.objects.all()
+    
     def get_queryset(self):
-        # 🚨 N+1 FIX: Grabs the nested product details to prevent loops
         return Wishlist.objects.select_related('product__category').filter(user=self.request.user)
         
     def perform_create(self, serializer):
@@ -595,6 +577,7 @@ class CouponViewSet(viewsets.ModelViewSet):
     serializer_class = CouponSerializer
     permission_classes = [IsAdminUser]
     pagination_class = StandardResultsSetPagination
+    
     def perform_create(self, serializer):
         instance = serializer.save()
         log_admin_action(self.request.user, f"Created Promo Code: '{instance.code}' ({instance.discount_percent}% off)")
@@ -611,11 +594,13 @@ class CouponViewSet(viewsets.ModelViewSet):
         instance.delete()
         log_admin_action(self.request.user, f"Deleted Promo Code: '{code}'")
 
+
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('order').all()
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
+    
     def perform_update(self, serializer):
         instance = self.get_object()
         old_status = instance.status
@@ -623,21 +608,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if old_status != new_instance.status:
             log_admin_action(self.request.user, f"Payment Tx #{new_instance.transaction_id} Status: '{old_status}' -> '{new_instance.status}'")
 
+
 class AdminLogViewSet(viewsets.ModelViewSet):
     queryset = AdminLog.objects.select_related('admin').all().order_by('-timestamp')
     serializer_class = AdminLogSerializer
     permission_classes = [IsAdminUser]
     pagination_class = StandardResultsSetPagination
 
-import threading
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-import threading
 
 class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = OrderItem.objects.all()
@@ -662,8 +639,6 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
         new_status = request.data.get('status')
         user = request.user
         
-        # 🚨 SECURITY FIX: Vendors are strictly prohibited from marking items as 'delivered'.
-        # Only admins or users with admin roles can assign 'delivered'.
         if new_status == 'delivered' and getattr(user, 'role', '') != 'admin':
             return Response(
                 {"error": "Unauthorized: Vendors cannot mark items as delivered. Only administrators can verify delivery."}, 
@@ -673,11 +648,9 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
         if new_status not in ['shipped', 'delivered', 'cancelled']:
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
             
-        # 1. Update individual item status
         item.status = new_status
         item.save()
 
-        # 🚀 2. Automatically Sync the Parent Order Status
         order = item.order
         all_items = order.order_items.all()
         
@@ -689,13 +662,10 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
             order.status = 'cancelled'
         order.save()
         
-        # 3. Trigger asynchronous customer notification email
         self.notify_customer_async(item)
-        
         return Response({"message": f"Item marked as {new_status}"}, status=status.HTTP_200_OK)
 
     def notify_customer_async(self, item):
-        """Spins up a background thread to alert the customer of item status updates."""
         def send_email():
             try:
                 order = item.order
@@ -719,6 +689,118 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
                     address=order.shipping_address or 'Saved Address'
                 )
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {str(e)}")
+                print(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {e!s}")
                 
         threading.Thread(target=send_email).start()
+
+
+# ==========================================
+# 6. PASSWORD RESET VIA EMAIL OTP ENDPOINTS
+# ==========================================
+class RequestPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 🚀 Use iexact to handle case-insensitivity (e.g. User@Gmail.com vs user@gmail.com)
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "No account found with this email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Generate 6-digit OTP and cache it using the normalized lower-case email as the key
+        otp = str(random.randint(100000, 999999))
+        normalized_email = email.lower()
+        
+        cache.set(f"pwd_reset_{normalized_email}", otp, timeout=300)
+
+        # Send email
+        send_otp_email(to_email=user.email, username=user.username, otp=otp)
+        return Response({"detail": "OTP sent successfully."}, status=status.HTTP_200_OK)
+
+
+class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp')
+
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(f"pwd_reset_{email}")
+
+        if not cached_otp or str(cached_otp).strip() != str(otp).strip():
+            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"detail": "OTP verified successfully."}, status=status.HTTP_200_OK)
+
+
+from django.db import transaction, connection
+
+class ConfirmPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp')
+        new_password = request.data.get('new_password')
+
+        if not email or not otp or not new_password:
+            return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(f"pwd_reset_{email}")
+        if not cached_otp or str(cached_otp).strip() != str(otp).strip():
+            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Force atomic transaction to ensure it commits
+        try:
+            with transaction.atomic():
+                user = User.objects.filter(email__iexact=email).first()
+                if not user:
+                    return Response({"error": "User not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+                print(f"[DEBUG] Updating password for user ID: {user.pk} ({user.email})")
+                user.set_password(new_password)
+                
+                # Explicitly specify update_fields to force an immediate SQL UPDATE
+                user.save(update_fields=['password'])
+                
+                # Force refresh from database to confirm the hash changed in storage
+                user.refresh_from_db()
+                print(f"[DEBUG] Successfully committed new hash to DB. Current hash starts with: {user.password[:15]}...")
+
+            # Cache is wiped only after successful transaction commit
+            cache.delete(f"pwd_reset_{email}")
+            return Response({"detail": "Password reset successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(f"[ERROR] Database save failed: {e}")
+            return Response({"error": "Internal database error during password reset."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DownloadInvoiceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, order_id):
+        try:
+            # Ensure users can only download invoices for their own orders (unless admin)
+            order = Order.objects.get(id=order_id)
+            if order.user != request.user and getattr(request.user, 'role', None) != 'admin':
+                return Response({"error": "Unauthorized access to this invoice."}, status=status.HTTP_403_FORBIDDEN)
+
+            # Generate PDF buffer
+            pdf_buffer = generate_invoice_pdf(order)
+
+            # Return file response stream
+            filename = f"Invoice_INV-{order.id:05d}.pdf"
+            return FileResponse(pdf_buffer, as_attachment=True, filename=filename, content_type='application/pdf')
+
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(f"[PDF ERROR] {e}")
+            return Response({"error": "Failed to generate invoice PDF."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

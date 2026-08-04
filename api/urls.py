@@ -1,10 +1,25 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
+
 from .views import (
-    UserViewSet, CategoryViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet,
-    ReviewViewSet, WishlistViewSet, CouponViewSet, PaymentViewSet, AdminLogViewSet,
-    CartViewSet, CartItemViewSet, RegisterView,AddressViewSet,VendorSalesViewSet,CookieTokenObtainPairView,CookieTokenRefreshView,LogoutView
+    AddressViewSet,
+    AdminLogViewSet,
+    CartItemViewSet,
+    CartViewSet,
+    CategoryViewSet,
+    CookieTokenObtainPairView,
+    CookieTokenRefreshView,
+    CouponViewSet,
+    LogoutView,
+    OrderItemViewSet,
+    OrderViewSet,
+    PaymentViewSet,
+    ProductViewSet,
+    RegisterView,
+    ReviewViewSet,
+    UserViewSet,
+    VendorSalesViewSet,
+    WishlistViewSet,VerifyOTPView,RequestPasswordResetView,ConfirmPasswordResetView,DownloadInvoiceView
 )
 
 # Public API router
@@ -37,4 +52,8 @@ urlpatterns = [
     path('token/', CookieTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'), 
     path('logout/', LogoutView.as_view(), name='logout'),
+    path('password-reset/request/', RequestPasswordResetView.as_view(), name='password-reset-request'),
+    path('password-reset/verify/', VerifyOTPView.as_view(), name='password-reset-verify'),
+    path('password-reset/confirm/', ConfirmPasswordResetView.as_view(), name='password-reset-confirm'),
+    path('orders/<int:order_id>/invoice/', DownloadInvoiceView.as_view(), name='download-invoice'),
 ]

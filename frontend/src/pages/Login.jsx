@@ -103,6 +103,11 @@ const Login = () => {
                 whileFocus={{ scale: 1.02 }}
               />
               
+              {/* 🚀 Added Forgot Password Link Right Here */}
+              <ForgotPasswordContainer>
+                <Link to="/forgot-password">Forgot password?</Link>
+              </ForgotPasswordContainer>
+
               <SubmitButton
                 type="submit"
                 disabled={isLoading}
@@ -255,7 +260,7 @@ const Subtitle = styled.p`
 const InputField = styled(motion.input)`
   width: 100%;
   padding: 1.1rem 1.2rem;
-  margin-bottom: 1.2rem;
+  margin-bottom: 0.2rem;
   border: 1px solid #E2E8F0;
   background: #F8FAFC;
   border-radius: 14px;
@@ -269,6 +274,26 @@ const InputField = styled(motion.input)`
     background: #ffffff;
     border-color: #0B8457;
     box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1);
+  }
+`;
+
+const ForgotPasswordContainer = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.4rem;
+  margin-bottom: 0.4rem;
+
+  a {
+    color: #0B8457;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #075E3E;
+      text-decoration: underline;
+    }
   }
 `;
 
@@ -286,7 +311,7 @@ const SubmitButton = styled(motion.button)`
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  margin-top: 0.5rem;
+  margin-top: 0.2rem;
   box-shadow: 0 6px 20px rgba(11, 132, 87, 0.25);
   transition: all 0.3s ease;
   position: relative;

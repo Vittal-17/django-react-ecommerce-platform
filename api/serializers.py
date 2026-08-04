@@ -1,14 +1,28 @@
-from rest_framework import serializers
+import threading
+
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
+from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from .models import (
-    User, Category, Product, Cart, CartItem, Order, 
-    OrderItem, Review, Wishlist, Coupon, Payment, AdminLog, Address
-)
-import threading
 from .email_service import send_welcome_email
+from .models import (
+    Address,
+    AdminLog,
+    Cart,
+    CartItem,
+    Category,
+    Coupon,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Review,
+    User,
+    Wishlist,
+)
+
+
 # ==========================================
 # 1. USERS & AUTHENTICATION
 # ==========================================
@@ -36,8 +50,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
     
         # 🚀 The New Welcome Email Trigger
-        import threading
-        from .email_service import send_welcome_email
         threading.Thread(target=send_welcome_email, args=(user.email, user.username)).start()
     
         return user

@@ -3,7 +3,7 @@ import { useState, useContext } from 'react';
 import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../../context/AuthContext';
-import { FaBoxOpen, FaBox, FaTruck, FaCheckCircle, FaTimesCircle, FaBan, FaStar, FaEdit, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaBoxOpen, FaBox, FaTruck, FaCheckCircle, FaTimesCircle, FaBan, FaStar, FaEdit, FaMapMarkerAlt, FaFileDownload } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 
 const OrdersSection = ({ orders, isLoadingOrders, orderPage, totalOrderPages, setOrderPage, userReviews, openReviewModal, onCancelOrderClick }) => {
@@ -11,6 +11,7 @@ const OrdersSection = ({ orders, isLoadingOrders, orderPage, totalOrderPages, se
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderItems, setOrderItems] = useState({});
   const [loadingItems, setLoadingItems] = useState(false);
+  const [downloadingOrderId, setDownloadingOrderId] = useState(null);
 
   const fetchOrderItems = async (orderId) => {
     if (orderItems[orderId]) return;
@@ -32,6 +33,31 @@ const OrdersSection = ({ orders, isLoadingOrders, orderPage, totalOrderPages, se
       toast.error('❌ Failed to load order items'); 
     } finally { 
       setLoadingItems(false); 
+    }
+  };
+
+  // 📄 Handle Invoice PDF Download
+  const handleDownloadInvoice = async (orderId) => {
+    setDownloadingOrderId(orderId);
+    const toastId = toast.loading('📄 Generating secure invoice PDF...');
+    try {
+      const response = await axiosInstance.get(`/api/orders/${orderId}/invoice/`, {
+        responseType: 'blob', // Crucial for handling binary PDF stream
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `Invoice_INV-${String(orderId).padStart(5, '0')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('📄 Invoice downloaded successfully!', { id: toastId });
+    } catch (err) {
+      toast.error('❌ Failed to download invoice PDF.', { id: toastId });
+    } finally {
+      setDownloadingOrderId(null);
     }
   };
 
@@ -83,12 +109,22 @@ const OrdersSection = ({ orders, isLoadingOrders, orderPage, totalOrderPages, se
               <OrderTotal>Total: <span>${Number(order.total_price)?.toFixed(2)}</span></OrderTotal>
               
               <ActionGroup>
+                {/* 📄 Invoice Download Button */}
+                <InvoiceButton 
+                  onClick={() => handleDownloadInvoice(order.id)}
+                  disabled={downloadingOrderId === order.id}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  <FaFileDownload /> {downloadingOrderId === order.id ? 'Generating...' : 'Invoice PDF'}
+                </InvoiceButton>
+
                 <ViewItemsButton 
                   onClick={() => { if(expandedOrderId === order.id) setExpandedOrderId(null); else { setExpandedOrderId(order.id); fetchOrderItems(order.id); } }}
                   whileTap={{ scale: 0.97 }}
                 >
                   {expandedOrderId === order.id ? 'Hide Items' : 'View Items'}
                 </ViewItemsButton>
+
                 {order.status === 'pending' && ( 
                   <DashboardCancelButton onClick={() => onCancelOrderClick(order.id)} whileTap={{ scale: 0.97 }}>
                     <FaBan /> Cancel Order
@@ -170,21 +206,9 @@ const OrderDate = styled.p` color: #64748B; font-size: 0.9rem; margin: 0; font-w
 
 const StatusBadge = styled.div`
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem; border-radius: 50px; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  
-  background: ${props => 
-    props.$status === 'pending' ? '#FEF3C7' : 
-    props.$status === 'delivered' ? '#ECFDF5' : 
-    props.$status === 'cancelled' ? '#FEF2F2' : '#EFF6FF'};
-    
-  color: ${props => 
-    props.$status === 'pending' ? '#B45309' : 
-    props.$status === 'delivered' ? '#047857' : 
-    props.$status === 'cancelled' ? '#DC2626' : '#1D4ED8'};
-    
-  border: 1px solid ${props => 
-    props.$status === 'pending' ? 'rgba(245, 158, 11, 0.3)' : 
-    props.$status === 'delivered' ? 'rgba(16, 185, 129, 0.3)' : 
-    props.$status === 'cancelled' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
+  background: ${props => props.$status === 'pending' ? '#FEF3C7' : props.$status === 'delivered' ? '#ECFDF5' : props.$status === 'cancelled' ? '#FEF2F2' : '#EFF6FF'};
+  color: ${props => props.$status === 'pending' ? '#B45309' : props.$status === 'delivered' ? '#047857' : props.$status === 'cancelled' ? '#DC2626' : '#1D4ED8'};
+  border: 1px solid ${props => props.$status === 'pending' ? 'rgba(245, 158, 11, 0.3)' : props.$status === 'delivered' ? 'rgba(16, 185, 129, 0.3)' : props.$status === 'cancelled' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
 `;
 
 const AddressRow = styled.div`
@@ -202,7 +226,16 @@ const OrderTotal = styled.p`
   span { color: #0F172A; font-weight: 900; font-size: 1.25rem; }
 `;
 
-const ActionGroup = styled.div` display: flex; gap: 0.8rem; flex-wrap: wrap; `;
+const ActionGroup = styled.div` display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; `;
+
+const InvoiceButton = styled(motion.button)`
+  display: flex; align-items: center; gap: 0.5rem;
+  background: #ECFDF5; color: #0B8457; border: 1px solid rgba(11, 132, 87, 0.2); 
+  padding: 0.6rem 1.2rem; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 0.9rem; 
+  transition: all 0.2s;
+  &:hover:not(:disabled) { background: #D1FAE5; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+`;
 
 const ViewItemsButton = styled(motion.button)`
   background: #F1F5F9; color: #334155; border: 1px solid #E2E8F0; padding: 0.6rem 1.2rem; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 0.9rem; transition: background 0.2s;

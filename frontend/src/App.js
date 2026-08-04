@@ -19,6 +19,7 @@ import Wishlist from './pages/Wishlist';
 import OrderSuccess from './pages/OrderSuccess';
 import AppToaster from './components/AppToaster';
 import VendorDashboard from './pages/VendorDashboard';
+import ForgotPassword from './pages/ForgotPassword'
 
 // --- ScrollToTop Component ---
 function ScrollToTop() {
@@ -51,7 +52,7 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/wishlist" element={<Wishlist />} />
-        
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/vendor" element={ <ProtectedRoute><VendorDashboard /></ProtectedRoute> } />
         <Route path="/dashboard" element={ <ProtectedRoute><Dashboard /></ProtectedRoute> } />
         <Route path="/admin" element={ <ProtectedRoute adminOnly><AdminPanel /></ProtectedRoute> } />

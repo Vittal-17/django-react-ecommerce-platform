@@ -1,9 +1,12 @@
 # email_service.py
 import sys
 import threading
-from django.core.mail import EmailMultiAlternatives
+from collections import defaultdict
+
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.utils.html import strip_tags
+
 from .models import Payment
 
 # 🚀 Fetch the dynamic production URL (Defaults to localhost for local testing)
@@ -26,7 +29,7 @@ def _send_html_email(to_email, subject, html_content):
         print(f"[EMAIL LOG] ✅ Sent to {to_email} | Subject: {subject}")
         return True
     except Exception as e:
-        print(f"[EMAIL ERROR] ❌ Anymail API failed: {str(e)}")
+        print(f"[EMAIL ERROR] ❌ Anymail API failed: {e!s}")
         return False
 
 def get_base_template(header_color, header_title, icon, body_html):
@@ -176,16 +179,26 @@ def send_order_email(to_email, username, order_id, status, total, payment_method
     html = get_base_template(theme_color, header_title, icon, body)
     return _send_html_email(to_email, subject, html)
 
-def send_vendor_new_order_email(to_email, username, order_id, product_name, quantity, earnings, customer_name, address):
-    """Fired when a customer purchases a vendor's product."""
+def send_vendor_new_order_email(to_email, username, order_id, items_list, total_earnings, customer_name, address):
+    """Fired when a customer purchases a vendor's products (Consolidated)."""
     theme_color = "#8B5CF6" 
     icon = "💰"
     header_title = "New Sale!"
     subject = f"Cha-ching! New Sale on EazyShop - Order #{order_id}"
     
+    # Dynamically build the rows for all items the vendor sold in this order
+    items_html = ""
+    for item in items_list:
+        items_html += f"""
+            <tr>
+                <td style="padding: 12px 0; border-bottom: 1px dashed #cbd5e1; color: #64748b;">Item Sold</td>
+                <td style="padding: 12px 0; text-align: right; border-bottom: 1px dashed #cbd5e1; font-weight: 600;">{item['quantity']}x {item['product_name']}</td>
+            </tr>
+        """
+    
     body = f"""
     <h2 style="margin-top: 0; color: #0f172a; font-size: 20px;">Cha-ching, {username}!</h2>
-    <p style="font-size: 16px; color: #475569;">Great news! <strong>{customer_name}</strong> just purchased your product. It's time to pack and ship!</p>
+    <p style="font-size: 16px; color: #475569;">Great news! <strong>{customer_name}</strong> just purchased from you. It's time to pack and ship!</p>
     
     <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; margin: 35px 0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
         <div style="background-color: {theme_color}15; padding: 15px 25px; border-bottom: 1px solid #e2e8f0;">
@@ -197,17 +210,14 @@ def send_vendor_new_order_email(to_email, username, order_id, product_name, quan
                     <td style="padding: 12px 0; border-bottom: 1px dashed #cbd5e1; color: #64748b;">Order ID</td>
                     <td style="padding: 12px 0; text-align: right; border-bottom: 1px dashed #cbd5e1; font-weight: 600; color: #0f172a;">#{order_id}</td>
                 </tr>
-                <tr>
-                    <td style="padding: 12px 0; border-bottom: 1px dashed #cbd5e1; color: #64748b;">Item Sold</td>
-                    <td style="padding: 12px 0; text-align: right; border-bottom: 1px dashed #cbd5e1; font-weight: 600;">{quantity}x {product_name}</td>
-                </tr>
+                {items_html}
                 <tr>
                     <td style="padding: 12px 0; border-bottom: 2px solid #e2e8f0; color: #64748b;">Ship To</td>
                     <td style="padding: 12px 0; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 14px; line-height: 1.4;">{address}</td>
                 </tr>
                 <tr>
                     <td style="padding: 18px 0 0 0; color: #0f172a; font-weight: 700; font-size: 16px;">Your Earnings</td>
-                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #10B981;">${earnings}</td>
+                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #10B981;">${total_earnings:.2f}</td>
                 </tr>
             </table>
         </div>
@@ -268,48 +278,53 @@ def _safe_async_dispatch(target_func, *args, **kwargs):
         try:
             target_func(*args, **kwargs)
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
+            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
     if 'test' in sys.argv:
         # Run synchronously during tests to prevent SQLite locks and race conditions
         try:
             target_func(*args, **kwargs)
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {str(e)}")
+            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
     else:
         threading.Thread(target=wrapper).start()
 
 def async_notify_vendors(order):
-    """Extracts primitives safely and dispatches vendor notifications"""
-    items_data = [
-        {
-            'vendor_email': item.vendor.email,
-            'vendor_username': item.vendor.username,
-            'product_name': item.product.name if item.product else 'Product',
-            'quantity': item.quantity,
-            'seller_earnings': str(item.seller_earnings)
-        }
-        for item in order.order_items.all() if item.vendor
-    ]
+    """Extracts primitives safely, groups by vendor, and dispatches consolidated notifications"""
+    
+    # 1. Group items by vendor email
+    vendor_groups = defaultdict(lambda: {'username': '', 'items': [], 'total_earnings': 0.0})
+    
+    for item in order.order_items.all():
+        if item.vendor:
+            email = item.vendor.email
+            vendor_groups[email]['username'] = item.vendor.username
+            vendor_groups[email]['items'].append({
+                'product_name': item.product.name if item.product else 'Product',
+                'quantity': item.quantity
+            })
+            # Tally up the earnings for this specific vendor
+            vendor_groups[email]['total_earnings'] += float(item.seller_earnings or 0)
+
     customer_username = order.user.username
     order_id = order.id
     shipping_address = order.shipping_address or 'Saved Address'
 
+    # 2. Send ONE email per vendor with all their items grouped together
     def send_emails():
-        for data in items_data:
+        for vendor_email, data in vendor_groups.items():
             try:
                 send_vendor_new_order_email(
-                    to_email=data['vendor_email'],
-                    username=data['vendor_username'],
+                    to_email=vendor_email,
+                    username=data['username'],
                     order_id=order_id,
-                    product_name=data['product_name'],
-                    quantity=data['quantity'],
-                    earnings=data['seller_earnings'],
+                    items_list=data['items'],
+                    total_earnings=data['total_earnings'],
                     customer_name=customer_username,
                     address=shipping_address
                 )
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Failed to notify vendor {data['vendor_email']}: {e}")
+                print(f"[EMAIL ERROR] ❌ Failed to notify vendor {vendor_email}: {e}")
 
     _safe_async_dispatch(send_emails)
 
@@ -341,29 +356,50 @@ def async_notify_customer_status(item):
                 address=address
             )
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Failed to notify customer: {str(e)}")
+            print(f"[EMAIL ERROR] ❌ Failed to notify customer: {e!s}")
 
     _safe_async_dispatch(send_email)
 
 def async_notify_cancellation(order):
-    """Extracts primitives safely and dispatches order cancellation notifications to vendors"""
-    items_data = [
-        {
-            'vendor_email': item.vendor.email,
-            'vendor_username': item.vendor.username,
-            'product_name': item.product.name if item.product else 'Product',
-        }
-        for item in order.order_items.all() if item.vendor
-    ]
+    """Extracts primitives safely, groups by vendor, and dispatches consolidated cancellation notifications"""
+    
+    # 1. Group cancelled items by vendor email
+    vendor_groups = defaultdict(lambda: {'username': '', 'products': []})
+    
+    for item in order.order_items.all():
+        if item.vendor:
+            email = item.vendor.email
+            vendor_groups[email]['username'] = item.vendor.username
+            vendor_groups[email]['products'].append(item.product.name if item.product else 'Product')
+
     order_id = order.id
 
+    # 2. Send ONE cancellation email per vendor listing all their cancelled items
     def send_cancellation_emails():
-        for data in items_data:
+        for vendor_email, data in vendor_groups.items():
             subject = f"Notice: Order #{order_id} has been Cancelled"
-            body = f"Hello {data['vendor_username']},\n\nOrder #{order_id} containing your product '{data['product_name']}' has been cancelled by the customer. Please do not fulfill this item.\n\nEazyShop Team"
+            
+            # Format the cancelled products into a clean HTML list
+            products_list = "".join([f"<li style='margin-bottom: 8px;'>{p}</li>" for p in data['products']])
+            
+            body = f"""
+            <h2 style="margin-top: 0; color: #0f172a; font-size: 20px;">Hello {data['username']},</h2>
+            <p style="font-size: 16px; color: #475569;">Order <strong>#{order_id}</strong> has been cancelled by the customer. Please <strong>do not fulfill</strong> the following items:</p>
+            
+            <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                <ul style="color: #9f1239; font-weight: 600; margin: 0; padding-left: 20px;">
+                    {products_list}
+                </ul>
+            </div>
+            
+            <p style="font-size: 14px; color: #64748b; margin-top: 20px;">If any of these items have already shipped, please contact support immediately.</p>
+            """
+            
             try:
-                _send_html_email(data['vendor_email'], subject, f"<p>{body.replace(chr(10), '<br>')}</p>")
+                # Upgraded to use your premium template layout
+                html = get_base_template("#E11D48", "Order Cancelled", "❌", body)
+                _send_html_email(vendor_email, subject, html)
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Threaded email failed for order #{order_id}: {str(e)}")
+                print(f"[EMAIL ERROR] ❌ Threaded email failed for order #{order_id}: {e!s}")
 
     _safe_async_dispatch(send_cancellation_emails)

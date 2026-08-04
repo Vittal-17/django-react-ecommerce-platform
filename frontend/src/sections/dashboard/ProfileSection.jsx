@@ -101,16 +101,12 @@ const ProfileSection = ({ addresses, setAddresses }) => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // 🔍 DIAGNOSTIC LOG: Let's see exactly what Django is sending back
-      console.log("Django Response:", response.data);
-
       toast.success('✨ Profile picture updated successfully!');
       
-      // 🚀 THE UNBREAKABLE MERGE
       const updatedUser = { 
         ...user, 
         ...(response.data || {}), 
-        id: user.id // <-- AT THE END: Forces the ID to stay exactly what it was before the upload
+        id: user.id 
       };
 
       if (setUser) setUser(updatedUser);
@@ -129,7 +125,12 @@ const ProfileSection = ({ addresses, setAddresses }) => {
     
     setOverlayConfig({ isVisible: true, mode: 'requesting' });
     try {
-      await axiosInstance.post('/api/users/verify-password/', { current_password: passwords.current });
+      // 🚀 FIX: Wrap text payload in FormData to bypass Django's strict multipart parser
+      const formData = new FormData();
+      formData.append('current_password', passwords.current);
+
+      await axiosInstance.post('/api/users/verify-password/', formData);
+      
       setIsPassStep1Open(false);
       setIsPassStep2Open(true);
       toast.success('🔒 Password verified successfully!');
@@ -154,7 +155,9 @@ const ProfileSection = ({ addresses, setAddresses }) => {
     setOverlayConfig({ isVisible: true, mode: 'requesting' });
 
     try {
-      const apiCall = axiosInstance.post('/api/users/request-otp/');
+      // 🚀 FIX: Sending an empty FormData payload ensures Content-Type matches multipart requirements
+      const emptyFormData = new FormData();
+      const apiCall = axiosInstance.post('/api/users/request-otp/', emptyFormData);
       const minDelay = new Promise(res => setTimeout(res, 1500));
       await Promise.all([apiCall, minDelay]);
 
@@ -175,15 +178,18 @@ const ProfileSection = ({ addresses, setAddresses }) => {
     setOverlayConfig({ isVisible: true, mode: 'verifying' });
 
     try {
-      let payload = { otp: otpCode };
+      // 🚀 FIX: Package all fields into FormData
+      const formData = new FormData();
+      formData.append('otp', otpCode);
+      
       if (activeUpdateType === 'contact') {
-        payload.phone = phoneInput;
+        formData.append('phone', phoneInput);
       } else {
-        payload.current_password = passwords.current;
-        payload.password = passwords.new;
+        formData.append('current_password', passwords.current);
+        formData.append('password', passwords.new);
       }
 
-      const apiCall = axiosInstance.patch(`/api/users/${user.id}/`, payload);
+      const apiCall = axiosInstance.patch(`/api/users/${user.id}/`, formData);
       const minDelay = new Promise(res => setTimeout(res, 2500));
       await Promise.all([apiCall, minDelay]);
 
