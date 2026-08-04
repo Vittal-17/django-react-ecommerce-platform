@@ -242,22 +242,24 @@ class CookieTokenObtainPairView(TokenObtainPairView):
         if response.status_code == 200:
             access_token = response.data.get('access')
             refresh_token = response.data.get('refresh')
+            # 🚀 DYNAMIC SECURITY: Uses Lax/HTTP locally, and None/HTTPS in production
+            is_production = not settings.DEBUG
             
             if access_token and refresh_token:
                 response.set_cookie(
                     key='access_token',
                     value=access_token,
                     httponly=True,
-                    secure=False,
-                    samesite='Lax',
+                    secure=True,        # 🚀 FORCES HTTPS TRANSMISSION
+                    samesite='None',    # 🚀 ALLOWS CROSS-DOMAIN COOKIES
                     max_age=300
                 )
                 response.set_cookie(
                     key='refresh_token',
                     value=refresh_token,
                     httponly=True,
-                    secure=False,
-                    samesite='Lax',
+                    secure=True,        # 🚀 FORCES HTTPS TRANSMISSION
+                    samesite='None',    # 🚀 ALLOWS CROSS-DOMAIN COOKIES
                     max_age=86400
                 )
                 del response.data['access']
@@ -276,12 +278,16 @@ class CookieTokenRefreshView(TokenRefreshView):
         
         if response.status_code == 200:
             access_token = response.data.get('access')
+            
+            # 🚀 DYNAMIC SECURITY: Uses Lax/HTTP locally, and None/HTTPS in production
+            is_production = not settings.DEBUG 
+            
             response.set_cookie(
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=False,
-                samesite='Lax',
+                secure=is_production,
+                samesite='None' if is_production else 'Lax',
                 max_age=300
             )
             del response.data['access']
@@ -294,10 +300,15 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({"success": True, "message": "Logged out successfully."})
-        response.delete_cookie('access_token', path='/', samesite='Lax')
-        response.delete_cookie('refresh_token', path='/', samesite='Lax')
+        
+        # 🚀 DYNAMIC SECURITY: The deletion request must perfectly match the creation flags
+        is_production = not settings.DEBUG 
+        samesite_flag = 'None' if is_production else 'Lax'
+        
+        response.delete_cookie('access_token', path='/', samesite=samesite_flag)
+        response.delete_cookie('refresh_token', path='/', samesite=samesite_flag)
+        
         return response
-
 
 # ==========================================
 # 2. CORE E-COMMERCE (Catalog)

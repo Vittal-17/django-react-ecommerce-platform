@@ -50,6 +50,12 @@ CSRF_TRUSTED_ORIGINS = [
     "https://django-react-ecommerce-platform.vercel.app",
 ]
 
+# 🚀 Cross-Domain Cookie Security Flags (MANDATORY FOR VERCEL + RENDER)
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+
 # Application definition
 
 INSTALLED_APPS = [
