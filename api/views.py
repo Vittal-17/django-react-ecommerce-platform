@@ -424,8 +424,18 @@ class OrderViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'total_price']
 
     def get_queryset(self):
-        # 🚀 SECURE BY DEFAULT: Always restricts to the logged-in user's personal orders.
-        return Order.objects.select_related('user').prefetch_related('order_items__product').filter(user=self.request.user)
+        user = self.request.user
+        queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
+
+        if not user.is_authenticated:
+            return queryset.none()
+
+        # 🚀 FIX: Grant admins global access so detail endpoints (PATCH/GET) don't throw 404
+        if getattr(user, 'role', '') == 'admin' or user.is_staff:
+            return queryset.all()
+
+        # Regular users are strictly secured to their own personal orders
+        return queryset.filter(user=user)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser], url_path='admin-all')
     def admin_all_orders(self, request):
@@ -444,19 +454,28 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = serializer.save(user=self.request.user)
         self.send_order_status_email(order)
 
-        # 🚀 FIX: Call the centralized, consolidated email function from email_service.py
+        # Call centralized vendor notification
         async_notify_vendors(order)
 
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
     def perform_update(self, serializer):
+        user = self.request.user
+        is_admin = getattr(user, 'role', '') == 'admin' or user.is_staff
+
         instance = self.get_object()
         old_status = instance.status
+
+        # 🚀 ROBUST SECURITY: Prevent non-admin users from changing order statuses
+        new_status = serializer.validated_data.get('status', old_status)
+        if old_status != new_status and not is_admin:
+            raise serializers.ValidationError({"status": "❌ Permission Denied: Only administrators can update order statuses."})
+
         new_instance = serializer.save()
 
         if old_status != new_instance.status:
             new_instance.order_items.update(status=new_instance.status)
-            log_admin_action(self.request.user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
+            log_admin_action(user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
             self.send_order_status_email(new_instance)
 
     def send_order_status_email(self, order):
@@ -468,7 +487,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             payment = None
             for _ in range(5):
                 payment = Payment.objects.filter(order=order).first()
-                if payment: break
+                if payment:
+                    break
                 time.sleep(1)
 
             if payment:
@@ -494,6 +514,9 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         order = self.get_object()
+
+        # Optional check: Regular users can only cancel their own orders (handled by get_queryset anyway),
+        # but let's ensure the status is pending.
         if order.status != 'pending':
             return Response({"error": "Cannot cancel non-pending order."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -510,7 +533,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     product.stock += item.quantity
                     product.save()
 
-        if getattr(request.user, 'role', '') == 'admin':
+        if getattr(request.user, 'role', '') == 'admin' or request.user.is_staff:
             log_admin_action(request.user, f"Cancelled Order #{order.id}")
 
         self.send_order_status_email(order)
