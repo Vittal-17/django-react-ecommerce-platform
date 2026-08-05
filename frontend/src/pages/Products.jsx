@@ -34,6 +34,7 @@ const Products = () => {
   const [maxPrice, setMaxPrice] = useState(1000);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Debounced Engine State
   const [debouncedMin, setDebouncedMin] = useState(0);
@@ -125,13 +126,12 @@ const Products = () => {
 
         const finalProducts = productsData.filter(Boolean);
 
-        if (finalProducts.length > 0) {
+        if (isInitialLoad && finalProducts.length > 0) {
           const calculatedMax = Math.ceil(Math.max(...finalProducts.map(p => Number(p.price || 0))));
           setHighestPrice(calculatedMax);
-          if (debouncedMax === 1000 || debouncedMax < calculatedMax) {
-            setMaxPrice(calculatedMax);
-            setDebouncedMax(calculatedMax);
-          }
+          setMaxPrice(calculatedMax);
+          setDebouncedMax(calculatedMax);
+          setIsInitialLoad(false);
         }
 
         setProducts(finalProducts);
@@ -253,15 +253,14 @@ const Products = () => {
                 <label htmlFor="stockToggle">In Stock Only</label>
               </ToggleSwitch>
 
-              {filtersActive && (
-                <ClearButton
-                  onClick={clearFilters}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <FaTimes /> Clear All
-                </ClearButton>
-              )}
+              <ClearButton
+                onClick={clearFilters}
+                $visible={filtersActive}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <FaTimes /> Clear All
+              </ClearButton>
             </FilterGrid>
           </AdvancedFilterPanel>
         )}
@@ -538,7 +537,22 @@ const ToggleSwitch = styled.div`
 `;
 
 const ClearButton = styled(motion.button)`
-  display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1.2rem; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: 50px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  display: flex; 
+  align-items: center; 
+  gap: 0.4rem; 
+  padding: 0.6rem 1.2rem; 
+  background: #FEF2F2; 
+  color: #DC2626; 
+  border: 1px solid #FCA5A5; 
+  border-radius: 50px; 
+  font-weight: 600; 
+  font-size: 0.9rem; 
+  cursor: pointer;
+  visibility: ${props => props.$visible ? 'visible' : 'hidden'};
+  opacity: ${props => props.$visible ? 1 : 0};
+  pointer-events: ${props => props.$visible ? 'auto' : 'none'};
+  transition: opacity 0.2s ease;
+
   &:hover { background: #FEE2E2; }
 `;
 
@@ -806,7 +820,9 @@ const EmptyState = styled.div`
     border-radius: 50px;
     font-weight: 700;
     cursor: pointer;
-    transition: background: #086341;
+    transition: background 0.2s;
+
+    &:hover { background: #086341; }
   }
 `;
 
