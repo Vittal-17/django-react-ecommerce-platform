@@ -17,8 +17,8 @@ from django.http import FileResponse
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from .utils.pdf_generator import generate_invoice_pdf
+from django.db.models import Q
 
-# 🚨 THE UPGRADE: Enterprise Filtering & Search
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
@@ -85,7 +85,7 @@ from .serializers import (
 User = get_user_model()
 
 class StandardResultsSetPagination(PageNumberPagination):
-    page_size = 12 
+    page_size = 12
     page_size_query_param = 'page_size'
     max_page_size = 100
 
@@ -109,7 +109,7 @@ class UserViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     parser_classes = [MultiPartParser, FormParser]
 
-    
+
     def get_serializer_class(self):
         if self.action in ['update', 'partial_update']:
             return UserProfileUpdateSerializer
@@ -122,14 +122,14 @@ class UserViewSet(viewsets.ModelViewSet):
         """Generates an OTP for profile updates with enterprise rate-limiting"""
         user = request.user
         today = date.today().isoformat()
-        
+
         count_key = f"otp_count_{user.id}_{today}"
         cooldown_key = f"otp_cooldown_{user.id}"
 
         # 🚨 1. Check the 60-Second Cooldown
         if cache.get(cooldown_key):
             return Response(
-                {"error": "Please wait 60 seconds before requesting another OTP."}, 
+                {"error": "Please wait 60 seconds before requesting another OTP."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -137,13 +137,13 @@ class UserViewSet(viewsets.ModelViewSet):
         otp_count = cache.get(count_key, 0)
         if otp_count >= 10:
             return Response(
-                {"error": "Daily OTP limit reached (10/day). Please try again tomorrow."}, 
+                {"error": "Daily OTP limit reached (10/day). Please try again tomorrow."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
         # 3. Generate the 6-digit OTP
         otp = str(random.randint(100000, 999999))
-        
+
         # 4. Save to Cache
         cache.set(f"profile_otp_{user.id}", otp, timeout=300) # OTP valid for 5 mins
         cache.set(count_key, otp_count + 1, timeout=86400)    # Increment daily count (expires in 24h)
@@ -162,7 +162,7 @@ class UserViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         is_owner = request.user.id == instance.id
         is_admin = getattr(request.user, 'role', None) == 'admin'
-        
+
         if not is_owner and not is_admin:
             return Response({"error": "Unauthorized action."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -190,7 +190,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return super().update(request, *args, **kwargs)
         except Exception:
             return Response({"error": "Profile update failed."}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='verify-password')
     def verify_password(self, request):
         """Real-time backend validation for the current password"""
@@ -210,7 +210,7 @@ class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated]
     queryset = Address.exceptions if hasattr(Address, 'exceptions') else Address.objects.all()
-    
+
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user)
 
@@ -238,13 +238,13 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
-        
+
         if response.status_code == 200:
             access_token = response.data.get('access')
             refresh_token = response.data.get('refresh')
             # 🚀 DYNAMIC SECURITY: Uses Lax/HTTP locally, and None/HTTPS in production
             is_production = not settings.DEBUG
-            
+
             if access_token and refresh_token:
                 response.set_cookie(
                     key='access_token',
@@ -264,7 +264,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
                 )
                 del response.data['access']
                 del response.data['refresh']
-                
+
         return response
 
 
@@ -273,15 +273,15 @@ class CookieTokenRefreshView(TokenRefreshView):
         refresh_token = request.COOKIES.get('refresh_token')
         if refresh_token:
             request.data['refresh'] = refresh_token
-            
+
         response = super().post(request, *args, **kwargs)
-        
+
         if response.status_code == 200:
             access_token = response.data.get('access')
-            
+
             # 🚀 DYNAMIC SECURITY: Uses Lax/HTTP locally, and None/HTTPS in production
-            is_production = not settings.DEBUG 
-            
+            is_production = not settings.DEBUG
+
             response.set_cookie(
                 key='access_token',
                 value=access_token,
@@ -291,7 +291,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                 max_age=300
             )
             del response.data['access']
-            
+
         return response
 
 
@@ -300,14 +300,14 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({"success": True, "message": "Logged out successfully."})
-        
+
         # 🚀 DYNAMIC SECURITY: The deletion request must perfectly match the creation flags
-        is_production = not settings.DEBUG 
+        is_production = not settings.DEBUG
         samesite_flag = 'None' if is_production else 'Lax'
-        
+
         response.delete_cookie('access_token', path='/', samesite=samesite_flag)
         response.delete_cookie('refresh_token', path='/', samesite=samesite_flag)
-        
+
         return response
 
 # ==========================================
@@ -338,26 +338,45 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
-    permission_classes = [IsSellerAdminOrReadOnly] 
-    pagination_class = StandardResultsSetPagination 
-    
+    permission_classes = [IsSellerAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['category'] 
-    search_fields = ['name', 'description'] 
-    ordering_fields = ['price', 'created_at'] 
+    filterset_fields = ['category']
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at']
 
     def get_queryset(self):
         user = self.request.user
         queryset = Product.objects.select_related('category', 'vendor')
-        
+
         if user.is_authenticated and getattr(user, 'role', '') == 'admin':
-            return queryset.all()
-            
-        vendor_param = self.request.query_params.get('vendor')
-        if user.is_authenticated and getattr(user, 'role', '') == 'seller' and vendor_param == str(user.id):
-            return queryset.filter(vendor=user)
-            
-        return queryset.filter(approval_status='approved', is_active=True)
+            queryset = queryset.all()
+        else:
+            vendor_param = self.request.query_params.get('vendor')
+            if user.is_authenticated and getattr(user, 'role', '') == 'seller' and vendor_param == str(user.id):
+                queryset = queryset.filter(vendor=user)
+            else:
+                # 🚀 SAFEGUARD: Allows 'approved' products OR products with null/blank status so existing DB items don't vanish
+                queryset = queryset.filter(
+                    Q(approval_status='approved') | Q(approval_status__isnull=True) | Q(approval_status=''),
+                    is_active=True
+                )
+
+        # Apply custom query parameter filters (Price range & Stock)
+        min_price = self.request.query_params.get('price__gte')
+        max_price = self.request.query_params.get('price__lte')
+
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+
+        in_stock = self.request.query_params.get('in_stock')
+        if in_stock == 'true':
+            queryset = queryset.filter(stock__gt=0)
+
+        return queryset
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -369,15 +388,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_price, old_stock, old_name = instance.price, instance.stock, instance.name
         new_instance = serializer.save()
-        
+
         changes = []
         if old_price != new_instance.price: changes.append(f"Price: ${old_price} -> ${new_instance.price}")
         if old_stock != new_instance.stock: changes.append(f"Stock: {old_stock} -> {new_instance.stock}")
         if old_name != new_instance.name: changes.append(f"Name: {old_name} -> {new_instance.name}")
-            
+
         if changes:
             log_admin_action(self.request.user, f"Updated '{new_instance.name}': {', '.join(changes)}")
-            
+
     def perform_destroy(self, instance):
         name = instance.name
         instance.is_active = False
@@ -405,25 +424,36 @@ class OrderViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'total_price']
 
     def get_queryset(self):
-        queryset = Order.objects.select_related('user').prefetch_related('order_items__product')
-        if getattr(self.request.user, 'role', None) == 'admin':
-            return queryset.all()
-        return queryset.filter(user=self.request.user)
+        # 🚀 SECURE BY DEFAULT: Always restricts to the logged-in user's personal orders.
+        return Order.objects.select_related('user').prefetch_related('order_items__product').filter(user=self.request.user)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser], url_path='admin-all')
+    def admin_all_orders(self, request):
+        """Dedicated secure endpoint strictly for the admin panel to view all global orders"""
+        queryset = Order.objects.select_related('user').prefetch_related('order_items__product').order_by('-created_at')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         order = serializer.save(user=self.request.user)
         self.send_order_status_email(order)
-        
+
         # 🚀 FIX: Call the centralized, consolidated email function from email_service.py
         async_notify_vendors(order)
-        
+
         log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
     def perform_update(self, serializer):
         instance = self.get_object()
         old_status = instance.status
         new_instance = serializer.save()
-        
+
         if old_status != new_instance.status:
             new_instance.order_items.update(status=new_instance.status)
             log_admin_action(self.request.user, f"Order #{new_instance.id} Status: '{old_status}' -> '{new_instance.status}'")
@@ -439,15 +469,15 @@ class OrderViewSet(viewsets.ModelViewSet):
             for _ in range(5):
                 payment = Payment.objects.filter(order=order).first()
                 if payment: break
-                time.sleep(1) 
-            
+                time.sleep(1)
+
             if payment:
                 payment_method_display = payment.get_payment_method_display()
                 transaction_id_display = payment.transaction_id or "Mock-TXN-Pending"
             else:
                 payment_method_display = "Pending Payment"
                 transaction_id_display = "Awaiting System Confirmation"
-            
+
             send_order_email(
                 to_email=order.user.email,
                 username=order.user.username,
@@ -461,33 +491,31 @@ class OrderViewSet(viewsets.ModelViewSet):
         except Exception as e:
             print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
-    # 🚀 REMOVED: The old self.notify_vendors_async loop has been completely deleted!
-
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         order = self.get_object()
         if order.status != 'pending':
             return Response({"error": "Cannot cancel non-pending order."}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         with transaction.atomic():
             order.status = 'cancelled'
             order.save()
-            
+
             for item in order.order_items.all():
                 item.status = 'cancelled'
                 item.save()
-                
+
                 if item.product:
                     product = Product.objects.select_for_update().get(id=item.product.id)
                     product.stock += item.quantity
                     product.save()
-                
+
         if getattr(request.user, 'role', '') == 'admin':
             log_admin_action(request.user, f"Cancelled Order #{order.id}")
-            
+
         self.send_order_status_email(order)
         async_notify_cancellation(order)
-        
+
         return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
 
 
@@ -507,10 +535,10 @@ class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
     queryset = Cart.objects.all()
-    
+
     def get_queryset(self):
         return Cart.objects.prefetch_related('items__product').filter(user=self.request.user)
-        
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -518,10 +546,10 @@ class CartViewSet(viewsets.ModelViewSet):
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return CartItem.objects.select_related('product', 'cart', 'cart__user').filter(cart__user=self.request.user)
-        
+
     def perform_create(self, serializer):
         cart, created = Cart.objects.get_or_create(user=self.request.user)
         try:
@@ -569,10 +597,10 @@ class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
     permission_classes = [IsAuthenticated]
     queryset = Wishlist.objects.all()
-    
+
     def get_queryset(self):
         return Wishlist.objects.select_related('product__category').filter(user=self.request.user)
-        
+
     def perform_create(self, serializer):
         try:
             serializer.save(user=self.request.user)
@@ -588,7 +616,7 @@ class CouponViewSet(viewsets.ModelViewSet):
     serializer_class = CouponSerializer
     permission_classes = [IsAdminUser]
     pagination_class = StandardResultsSetPagination
-    
+
     def perform_create(self, serializer):
         instance = serializer.save()
         log_admin_action(self.request.user, f"Created Promo Code: '{instance.code}' ({instance.discount_percent}% off)")
@@ -611,7 +639,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
-    
+
     def perform_update(self, serializer):
         instance = self.get_object()
         old_status = instance.status
@@ -629,19 +657,19 @@ class AdminLogViewSet(viewsets.ModelViewSet):
 
 class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = OrderItem.objects.all()
-    serializer_class = OrderItemSerializer 
+    serializer_class = OrderItemSerializer
     permission_classes = [IsSellerOrAdmin]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = self.request.user
         base_qs = OrderItem.objects.select_related('order', 'order__user', 'product').order_by('-id')
-        
+
         if getattr(user, 'role', '') == 'admin':
             return base_qs
         if getattr(user, 'role', '') == 'seller':
             return base_qs.filter(vendor=user)
-            
+
         return OrderItem.objects.none()
 
     @action(detail=True, methods=['patch'])
@@ -649,22 +677,22 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
         item = self.get_object()
         new_status = request.data.get('status')
         user = request.user
-        
+
         if new_status == 'delivered' and getattr(user, 'role', '') != 'admin':
             return Response(
-                {"error": "Unauthorized: Vendors cannot mark items as delivered. Only administrators can verify delivery."}, 
+                {"error": "Unauthorized: Vendors cannot mark items as delivered. Only administrators can verify delivery."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         if new_status not in ['shipped', 'delivered', 'cancelled']:
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         item.status = new_status
         item.save()
 
         order = item.order
         all_items = order.order_items.all()
-        
+
         if all(i.status == 'delivered' for i in all_items):
             order.status = 'delivered'
         elif any(i.status == 'shipped' for i in all_items):
@@ -672,7 +700,7 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
         elif all(i.status == 'cancelled' for i in all_items):
             order.status = 'cancelled'
         order.save()
-        
+
         self.notify_customer_async(item)
         return Response({"message": f"Item marked as {new_status}"}, status=status.HTTP_200_OK)
 
@@ -681,19 +709,19 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
             try:
                 order = item.order
                 payment = Payment.objects.filter(order=order).first()
-                
+
                 if payment:
                     payment_method_display = payment.get_payment_method_display()
                     transaction_id_display = payment.transaction_id or "Verified Transaction"
                 else:
                     payment_method_display = "Completed"
                     transaction_id_display = "System Confirmed"
-                
+
                 send_order_email(
                     to_email=order.user.email,
                     username=order.user.username,
                     order_id=order.id,
-                    status=item.status,  
+                    status=item.status,
                     total=order.total_price,
                     payment_method=payment_method_display,
                     txn_id=transaction_id_display,
@@ -701,7 +729,7 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
                 )
             except Exception as e:
                 print(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {e!s}")
-                
+
         threading.Thread(target=send_email).start()
 
 
@@ -724,7 +752,7 @@ class RequestPasswordResetView(APIView):
         # Generate 6-digit OTP and cache it using the normalized lower-case email as the key
         otp = str(random.randint(100000, 999999))
         normalized_email = email.lower()
-        
+
         cache.set(f"pwd_reset_{normalized_email}", otp, timeout=300)
 
         # Send email
@@ -776,10 +804,10 @@ class ConfirmPasswordResetView(APIView):
 
                 print(f"[DEBUG] Updating password for user ID: {user.pk} ({user.email})")
                 user.set_password(new_password)
-                
+
                 # Explicitly specify update_fields to force an immediate SQL UPDATE
                 user.save(update_fields=['password'])
-                
+
                 # Force refresh from database to confirm the hash changed in storage
                 user.refresh_from_db()
                 print(f"[DEBUG] Successfully committed new hash to DB. Current hash starts with: {user.password[:15]}...")

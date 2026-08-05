@@ -26,27 +26,31 @@ const AdminPanel = () => {
   const [activeSection, setActiveSection] = useState('logs'); 
 
   const fetchData = async () => {
-    try {
-      const [usersRes, productsRes, categoriesRes, reviewsRes, ordersRes] = await Promise.all([
-        axiosInstance.get('/api/users/'),
-        axiosInstance.get('/api/products/'),
-        axiosInstance.get('/api/categories/'),
-        axiosInstance.get('/api/reviews/'),
-        axiosInstance.get('/api/orders/')
-      ]);
-
-      setUsers(usersRes.data);
-      setProducts(productsRes.data);
-      setCategories(categoriesRes.data);
-      setReviews(reviewsRes.data);
-      setOrders(ordersRes.data.map(order => ({
-        ...order,
-        username: usersRes.data.find(u => u.id === order.user)?.username || 'Unknown'
-      })));
-    } catch (err) {
-      console.error('Failed to load admin data', err);
-    }
-  };
+      try {
+        const [usersRes, productsRes, categoriesRes, reviewsRes, ordersRes] = await Promise.all([
+          axiosInstance.get('/api/users/'),
+          axiosInstance.get('/api/products/'),
+          axiosInstance.get('/api/categories/'),
+          axiosInstance.get('/api/reviews/'),
+          axiosInstance.get('/api/orders/admin-all/')
+        ]);
+  
+        const usersList = usersRes.data.results || usersRes.data;
+        const ordersList = ordersRes.data.results || ordersRes.data;
+  
+        setUsers(usersList);
+        setProducts(productsRes.data.results || productsRes.data);
+        setCategories(categoriesRes.data.results || categoriesRes.data);
+        setReviews(reviewsRes.data.results || reviewsRes.data);
+        
+        setOrders(ordersList.map(order => ({
+          ...order,
+          username: usersList.find(u => u.id === order.user)?.username || 'Unknown'
+        })));
+      } catch (err) {
+        console.error('Failed to load admin data', err);
+      }
+    };
 
   useEffect(() => {
     fetchData();

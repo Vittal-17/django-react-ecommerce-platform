@@ -20,7 +20,7 @@ const OrdersSection = () => {
   const fetchOrdersAndProducts = async () => {
     try {
       const [ordersRes, usersRes, productsRes] = await Promise.all([
-        axiosInstance.get(`/api/orders/?page=${currentPage}`), 
+        axiosInstance.get(`/api/orders/admin-all/?page=${currentPage}`), 
         axiosInstance.get('/api/users/?page_size=1000'),
         axiosInstance.get('/api/products/?page_size=1000') 
       ]);

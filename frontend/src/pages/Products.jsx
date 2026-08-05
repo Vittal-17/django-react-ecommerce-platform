@@ -1,6 +1,6 @@
 // src/pages/Products.jsx
 import { useEffect, useState, useContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
 import { FaSearch, FaShoppingCart, FaArrowRight, FaFilter, FaTimes, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
@@ -8,12 +8,13 @@ import { toast } from "react-hot-toast";
 import { Link } from 'react-router-dom';
 import { SkeletonProductCard } from '../components/SkeletonLoader';
 import AppLayout from '../components/AppLayout';
-import {PageHeader,GlowingPageContainer } from '../styles/SharedPageStyles';
+import { PageHeader, GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const Products = () => {
   const { axiosInstance, user } = useContext(AuthContext);
+  
+  // Core Data States
   const [products, setProducts] = useState([]);
-  const [filtered, setFiltered] = useState([]);
   const [categories, setCategories] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -27,7 +28,7 @@ const Products = () => {
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('');
 
-  // UI Slider State
+  // UI Slider State 
   const [highestPrice, setHighestPrice] = useState(1000);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(1000);
@@ -38,42 +39,110 @@ const Products = () => {
   const [debouncedMin, setDebouncedMin] = useState(0);
   const [debouncedMax, setDebouncedMax] = useState(1000);
 
+  // Optimized Debounce for Price Sliders
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedMin(minPrice);
       setDebouncedMax(maxPrice);
+      setCurrentPage(1); 
     }, 500);
     return () => clearTimeout(timer);
   }, [minPrice, maxPrice]);
 
+  // Explicit Filter Handlers
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleCategoryChange = (e) => {
+    setCategory(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (e) => {
+    setSort(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleStockToggle = (e) => {
+    setInStockOnly(e.target.checked);
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearch(''); 
+    setCategory(''); 
+    setSort(''); 
+    setMinPrice(0); 
+    setMaxPrice(highestPrice); 
+    setInStockOnly(false);
+    setCurrentPage(1);
+  };
+
+  // Safe Fetch Engine with Fallbacks
   useEffect(() => {
     const fetchCatalog = async () => {
       setIsLoading(true);
       try {
-        const res = await axiosInstance.get(`/api/products/?page=${currentPage}`);
-        const items = res.data.results || res.data;
+        const params = new URLSearchParams({ page: currentPage });
+        if (search) params.append('search', search);
+        if (category) params.append('category', category);
+        if (sort === 'price_asc') params.append('ordering', 'price');
+        if (sort === 'price_desc') params.append('ordering', '-price');
+        if (debouncedMin > 0) params.append('price__gte', debouncedMin);
+        if (debouncedMax < highestPrice) params.append('price__lte', debouncedMax);
+        if (inStockOnly) params.append('in_stock', 'true');
 
-        if (res.data.count) {
-          setTotalPages(Math.ceil(res.data.count / 12));
+        const res = await axiosInstance.get(`/api/products/?${params.toString()}`);
+        const items = res.data.results || res.data;
+        const validItems = Array.isArray(items) ? items : [];
+
+        if (res.data.count !== undefined) {
+          setTotalPages(Math.ceil(res.data.count / 12) || 1);
         }
 
-        const productsData = await Promise.all(items.map(async p => {
-          const { data } = await axiosInstance.get(`/api/products/${p.id}/`);
-          return { ...p, price: Number(p.price), image: data.image_url, stock: data.stock || 0 };
+        // Hydrate detailed data safely
+        const productsData = await Promise.all(validItems.map(async p => {
+          if (!p || !p.id) return null;
+          try {
+            const { data } = await axiosInstance.get(`/api/products/${p.id}/`);
+            return { 
+              ...p, 
+              price: Number(p.price || data.price || 0), 
+              image: data.image_url || data.image || p.image_url || p.image || null, 
+              stock: Number(data.stock !== undefined ? data.stock : (p.stock || 0))
+            };
+          } catch (e) {
+            return { 
+              ...p, 
+              price: Number(p.price || 0), 
+              image: p.image_url || p.image || null, 
+              stock: Number(p.stock || 0) 
+            };
+          }
         }));
 
-        setProducts(productsData);
+        const finalProducts = productsData.filter(Boolean);
 
-        const calculatedMaxPrice = Math.ceil(Math.max(...productsData.map(p => p.price), 100));
-        setHighestPrice(calculatedMaxPrice);
-        setMaxPrice(calculatedMaxPrice);
-        setDebouncedMax(calculatedMaxPrice);
+        if (finalProducts.length > 0) {
+          const calculatedMax = Math.ceil(Math.max(...finalProducts.map(p => Number(p.price || 0))));
+          setHighestPrice(calculatedMax);
+          if (debouncedMax === 1000 || debouncedMax < calculatedMax) {
+            setMaxPrice(calculatedMax);
+            setDebouncedMax(calculatedMax);
+          }
+        }
+
+        setProducts(finalProducts);
 
         const initialQuantities = {};
-        productsData.forEach(p => initialQuantities[p.id] = 1);
+        finalProducts.forEach(p => initialQuantities[p.id] = 1);
         setQuantities(initialQuantities);
+
       } catch (err) {
-        console.error("Failed to load products", err);
+        console.error("Failed to load products:", err);
+        toast.error("❌ Failed to load catalog.");
       } finally {
         setIsLoading(false);
       }
@@ -83,27 +152,10 @@ const Products = () => {
 
     axiosInstance.get('/api/categories/')
       .then(res => setCategories(res.data.results || res.data))
-      .catch(() => toast.error('❌ Failed to load categories.'));
-
-  }, [axiosInstance, currentPage]);
-
-  // Unified Filtering Logic
-  useEffect(() => {
-    let result = [...products];
-    if (search) result = result.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
-    if (category) result = result.filter(p => p.category === parseInt(category));
-    if (inStockOnly) result = result.filter(p => p.stock > 0);
-    result = result.filter(p => p.price >= debouncedMin && p.price <= debouncedMax);
-
-    if (sort === 'price_asc') result.sort((a, b) => a.price - b.price);
-    else if (sort === 'price_desc') result.sort((a, b) => b.price - a.price);
-
-    setFiltered(result);
-  }, [search, category, sort, debouncedMin, debouncedMax, inStockOnly, products]);
-
-  const clearFilters = () => {
-    setSearch(''); setCategory(''); setSort(''); setMinPrice(0); setMaxPrice(highestPrice); setInStockOnly(false);
-  };
+      .catch(() => console.warn('Failed to load categories'));
+      
+    // eslint-disable-next-line
+  }, [axiosInstance, currentPage, search, category, sort, debouncedMin, debouncedMax, inStockOnly]);
 
   const filtersActive = search || category || sort || minPrice > 0 || maxPrice < highestPrice || inStockOnly;
 
@@ -146,20 +198,6 @@ const Products = () => {
     }
   };
 
-  // Animation Variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.06 }
-    }
-  };
-
-  const cardVariants = {
-    hidden: { opacity: 0, y: 25 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 20 } }
-  };
-
   return (
     <AppLayout>
       <GlowingPageContainer $maxWidth="1100px">
@@ -177,13 +215,13 @@ const Products = () => {
         <FilterRow>
           <SearchBar>
             <FaSearch className="icon" />
-            <input type="text" placeholder="Search by name, brand, or feature..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" placeholder="Search by name, brand, or feature..." value={search} onChange={handleSearchChange} />
           </SearchBar>
-          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <Select value={category} onChange={handleCategoryChange}>
             <option value="">All Categories</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
-          <Select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <Select value={sort} onChange={handleSortChange}>
             <option value="">Sort By</option>
             <option value="price_asc">Price: Low to High</option>
             <option value="price_desc">Price: High to Low</option>
@@ -193,47 +231,40 @@ const Products = () => {
           </AdvancedToggle>
         </FilterRow>
 
-        <AnimatePresence>
-          {showFilters && (
-            <AdvancedFilterPanel
-              initial={{ opacity: 0, height: 0, marginTop: 0 }}
-              animate={{ opacity: 1, height: 'auto', marginTop: '1.25rem' }}
-              exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            >
-              <FilterGrid>
-                <PriceSliderContainer>
-                  <label>Max Budget</label>
-                  <SliderTrack>
-                    <TrackFill $min={(minPrice / highestPrice) * 100} $max={(maxPrice / highestPrice) * 100} />
-                    <ThumbInput type="range" min="0" max={highestPrice} value={minPrice} onChange={(e) => setMinPrice(Math.min(Number(e.target.value), maxPrice - 1))} style={{ zIndex: minPrice > highestPrice * 0.9 ? 5 : 3 }} />
-                    <ThumbInput type="range" min="0" max={highestPrice} value={maxPrice} onChange={(e) => setMaxPrice(Math.max(Number(e.target.value), minPrice + 1))} />
-                  </SliderTrack>
-                  <PriceLabel>${minPrice} - ${maxPrice}</PriceLabel>
-                </PriceSliderContainer>
+        {showFilters && (
+          <AdvancedFilterPanel
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: '1.25rem' }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          >
+            <FilterGrid>
+              <PriceSliderContainer>
+                <label>Max Budget</label>
+                <SliderTrack>
+                  <TrackFill $min={(minPrice / highestPrice) * 100} $max={(maxPrice / highestPrice) * 100} />
+                  <ThumbInput type="range" min="0" max={highestPrice} value={minPrice} onChange={(e) => setMinPrice(Math.min(Number(e.target.value), maxPrice - 1))} style={{ zIndex: minPrice > highestPrice * 0.9 ? 5 : 3 }} />
+                  <ThumbInput type="range" min="0" max={highestPrice} value={maxPrice} onChange={(e) => setMaxPrice(Math.max(Number(e.target.value), minPrice + 1))} />
+                </SliderTrack>
+                <PriceLabel>${minPrice} - ${maxPrice}</PriceLabel>
+              </PriceSliderContainer>
 
-                <ToggleSwitch>
-                  <input type="checkbox" id="stockToggle" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} />
-                  <label htmlFor="stockToggle">In Stock Only</label>
-                </ToggleSwitch>
+              <ToggleSwitch>
+                <input type="checkbox" id="stockToggle" checked={inStockOnly} onChange={handleStockToggle} />
+                <label htmlFor="stockToggle">In Stock Only</label>
+              </ToggleSwitch>
 
-                <AnimatePresence>
-                  {filtersActive && (
-                    <ClearButton
-                      onClick={clearFilters}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <FaTimes /> Clear All
-                    </ClearButton>
-                  )}
-                </AnimatePresence>
-              </FilterGrid>
-            </AdvancedFilterPanel>
-          )}
-        </AnimatePresence>
+              {filtersActive && (
+                <ClearButton
+                  onClick={clearFilters}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <FaTimes /> Clear All
+                </ClearButton>
+              )}
+            </FilterGrid>
+          </AdvancedFilterPanel>
+        )}
       </GlassControlHub>
 
       <ProductsContainer>
@@ -241,11 +272,8 @@ const Products = () => {
           <ProductGrid>
             {[...Array(8)].map((_, index) => <SkeletonProductCard key={index} />)}
           </ProductGrid>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+        ) : products.length === 0 ? (
+          <EmptyState>
             <span className="emoji">🔍</span>
             <h3>No Products Matching Criteria</h3>
             <p>We couldn't find anything matching your current search or filters.</p>
@@ -254,71 +282,64 @@ const Products = () => {
             )}
           </EmptyState>
         ) : (
-          <ProductGrid
-            as={motion.div}
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <AnimatePresence mode='popLayout'>
-              {filtered.map((product) => {
-                const qty = quantities[product.id] || 1;
-                const isAtLimit = qty >= product.stock;
+          <ProductGrid>
+            {products.map((product) => {
+              const qty = quantities[product.id] || 1;
+              const stockVal = Number(product.stock || 0);
+              const isAtLimit = qty >= stockVal;
+              const safePrice = Number(product.price || 0);
 
-                return (
-                  <ProductCard
-                    key={product.id}
-                    layout
-                    variants={cardVariants}
-                    whileHover={{ y: -8 }}
-                  >
-                    {product.image && (
-                      <ProductImage>
-                        {/* Floating Stock Badge */}
-                        <StockBadge $stock={product.stock}>
-                          {product.stock > 5 ? (
-                            <><FaCheckCircle size={10} /> In Stock</>
-                          ) : product.stock > 0 ? (
-                            <><FaExclamationTriangle size={10} /> Low Stock ({product.stock})</>
-                          ) : (
-                            <>Out of Stock</>
-                          )}
-                        </StockBadge>
+              return (
+                <ProductCard
+                  key={product.id}
+                  as={motion.div}
+                  whileHover={{ y: -8 }}
+                >
+                  {product.image && (
+                    <ProductImage>
+                      <StockBadge $stock={stockVal}>
+                        {stockVal > 5 ? (
+                          <><FaCheckCircle size={10} /> In Stock</>
+                        ) : stockVal > 0 ? (
+                          <><FaExclamationTriangle size={10} /> Low Stock ({stockVal})</>
+                        ) : (
+                          <>Out of Stock</>
+                        )}
+                      </StockBadge>
 
-                        <Link to={`/products/${product.id}/`}>
-                          <img src={product.image} alt={product.name} />
-                        </Link>
-                      </ProductImage>
-                    )}
-                    <ProductInfo>
-                      <div className="meta">
-                        <Link to={`/products/${product.id}/`} className="title">{product.name}</Link>
-                        <p className="desc">{product.description?.slice(0, 65)}...</p>
-                      </div>
+                      <Link to={`/products/${product.id}/`}>
+                        <img src={product.image} alt={product.name || 'Product'} />
+                      </Link>
+                    </ProductImage>
+                  )}
+                  <ProductInfo>
+                    <div className="meta">
+                      <Link to={`/products/${product.id}/`} className="title">{product.name || 'Untitled Product'}</Link>
+                      <p className="desc">{String(product.description || '').slice(0, 65)}...</p>
+                    </div>
 
-                      <PriceRow>
-                        <Price>${product.price.toFixed(2)}</Price>
+                    <PriceRow>
+                      <Price>${safePrice.toFixed(2)}</Price>
 
-                        <QuantityControl>
-                          <button onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.max(1, prev[product.id] - 1) }))} disabled={qty <= 1}>-</button>
-                          <span>{qty}</span>
-                          <button disabled={isAtLimit} onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.min(product.stock, prev[product.id] + 1) }))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
-                        </QuantityControl>
-                      </PriceRow>
+                      <QuantityControl>
+                        <button onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.max(1, (prev[product.id] || 1) - 1) }))} disabled={qty <= 1}>-</button>
+                        <span>{qty}</span>
+                        <button disabled={isAtLimit} onClick={() => setQuantities(prev => ({ ...prev, [product.id]: Math.min(stockVal, (prev[product.id] || 1) + 1) }))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
+                      </QuantityControl>
+                    </PriceRow>
 
-                      <AddToCartButton
-                        onClick={() => addToCart(product)}
-                        disabled={product.stock === 0}
-                        whileTap={{ scale: 0.96 }}
-                        $outOfStock={product.stock === 0}
-                      >
-                        <FaShoppingCart /> {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-                      </AddToCartButton>
-                    </ProductInfo>
-                  </ProductCard>
-                );
-              })}
-            </AnimatePresence>
+                    <AddToCartButton
+                      onClick={() => addToCart(product)}
+                      disabled={stockVal === 0}
+                      whileTap={{ scale: 0.96 }}
+                      $outOfStock={stockVal === 0}
+                    >
+                      <FaShoppingCart /> {stockVal === 0 ? 'Out of Stock' : 'Add to Cart'}
+                    </AddToCartButton>
+                  </ProductInfo>
+                </ProductCard>
+              );
+            })}
           </ProductGrid>
         )}
 
@@ -371,7 +392,6 @@ const GlassControlHub = styled.div`
   width: 92%;
   box-sizing: border-box;
 
-  /* 🚀 MOBILE FIX: Shrink padding and widen to save space for filters */
   @media (max-width: 768px) {
     padding: 1rem;
     width: 95%;
@@ -416,11 +436,11 @@ const SearchBar = styled.div`
   }
   .icon { color: #9CA3AF; font-size: 1.1rem; }
 
-  /* 🚀 MOBILE FIX: Force the search bar to span full width on its own row */
   @media (max-width: 768px) {
     min-width: 100%;
   }
 `;
+
 const Select = styled.select`
   padding: 0.7rem 1.2rem;
   border-radius: 50px;
@@ -442,7 +462,6 @@ const Select = styled.select`
 
   &:focus { outline: none; border-color: #0B8457; box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1); }
 
-  /* 🚀 MOBILE FIX: Allow the two dropdowns to neatly share a single row */
   @media (max-width: 768px) {
     min-width: 45%;
     flex: 1 1 45%;
@@ -531,23 +550,21 @@ const ProductsContainer = styled.div`
   padding: 0 2.5rem;
   box-sizing: border-box;
 
-  /* 🚀 MOBILE FIX: Reduced padding and added top breathing room so the first card doesn't slam into the sticky filter hub */
   @media (max-width: 768px) {
     padding: 0 1rem;
     margin-top: 1rem; 
   }
 `;
 
-const ProductGrid = styled(motion.div)`
+const ProductGrid = styled.div`
   display: grid;
   gap: 2rem;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
 
-  /* 🚀 MOBILE FIX: Switch to Flexbox to prevent Framer Motion from collapsing the CSS Grid gaps */
   @media (max-width: 768px) {
     display: flex;
     flex-direction: column;
-    gap: 0; /* Spacing is now handled directly by the cards */
+    gap: 0;
   }
 `;
 
@@ -568,11 +585,8 @@ const ProductCard = styled(motion.div)`
     box-shadow: 0 20px 40px -10px rgba(11, 132, 87, 0.15);
   }
 
-  /* 🚀 MOBILE FIX: Hardcoded margins guarantee flawless vertical spacing during layout animations */
   @media (max-width: 768px) {
     margin-bottom: 1.5rem;
-
-    /* Removes the margin from the very last card so it doesn't create dead space at the footer */
     &:last-child {
       margin-bottom: 0;
     }
@@ -612,8 +626,6 @@ const ProductImage = styled.div`
     transform: scale(1.12);
   }
 `;
-
-
 
 const StockBadge = styled.div`
   position: absolute;
@@ -773,7 +785,7 @@ const AddToCartButton = styled(motion.button)`
   }
 `;
 
-const EmptyState = styled(motion.div)`
+const EmptyState = styled.div`
   text-align: center;
   padding: 5rem 2rem;
   background: #ffffff;
@@ -794,9 +806,7 @@ const EmptyState = styled(motion.div)`
     border-radius: 50px;
     font-weight: 700;
     cursor: pointer;
-    transition: background 0.2s;
-
-    &:hover { background: #086341; }
+    transition: background: #086341;
   }
 `;
 
