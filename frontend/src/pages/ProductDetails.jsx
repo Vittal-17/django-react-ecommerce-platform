@@ -8,7 +8,7 @@ import { toast } from "react-hot-toast";
 import { FaStar, FaShoppingCart, FaArrowRight, FaCheckCircle, FaStore, FaExclamationTriangle } from 'react-icons/fa';
 import { SkeletonRow } from '../components/SkeletonLoader';
 import AppLayout from '../components/AppLayout';
-import {GlowingPageContainer } from '../styles/SharedPageStyles';
+import { GlowingPageContainer } from '../styles/SharedPageStyles';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -119,25 +119,18 @@ const ProductDetail = () => {
 
   if (!product) return null;
 
+  const stockVal = product.stock || 0;
+
   return (
     <AppLayout>
       <GlowingPageContainer $maxWidth="1100px">
-      {/* 🚀 TOP BUY SECTION: Image and Primary Actions only */}
+      {/* 🚀 TOP BUY SECTION: Clean Image Pane without overlapping badge */}
       <ContentGrid>
         <ImagePane 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
         >
-          <StockBadge $stock={product.stock || 0}>
-            {(product.stock || 0) > 5 ? (
-              <><FaCheckCircle size={12} /> In Stock</>
-            ) : (product.stock || 0) > 0 ? (
-              <><FaExclamationTriangle size={12} /> Low Stock ({product.stock})</>
-            ) : (
-              <>Out of Stock</>
-            )}
-          </StockBadge>
           <img src={product.image_url} alt={product.name} />
         </ImagePane>
 
@@ -158,9 +151,22 @@ const ProductDetail = () => {
             )}
           </AnimatePresence>
 
-          <VendorTag>
-            <FaStore /> Sold by: <strong>{product.vendor_name || 'EazyShop Official'}</strong>
-          </VendorTag>
+          <TopMetaRow>
+            <VendorTag>
+              <FaStore /> Sold by: <strong>{product.vendor_name || 'EazyShop Official'}</strong>
+            </VendorTag>
+
+            {/* 🚀 POLISHED PLACEMENT: Cleanly docked alongside metadata */}
+            <StockBadge $stock={stockVal}>
+              {stockVal > 5 ? (
+                <><FaCheckCircle size={12} /> In Stock</>
+              ) : stockVal > 0 ? (
+                <><FaExclamationTriangle size={12} /> Low Stock ({stockVal})</>
+              ) : (
+                <>Out of Stock</>
+              )}
+            </StockBadge>
+          </TopMetaRow>
 
           <Title>{product.name}</Title>
           <Price>${Number(product.price).toFixed(2)}</Price>
@@ -171,17 +177,17 @@ const ProductDetail = () => {
               <QuantityControl>
                 <button onClick={() => setQuantity(prev => Math.max(1, prev - 1))} disabled={quantity <= 1}>-</button>
                 <span>{quantity}</span>
-                <button disabled={isAtLimit} onClick={() => setQuantity(prev => Math.min(product.stock || 0, prev + 1))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
+                <button disabled={isAtLimit} onClick={() => setQuantity(prev => Math.min(stockVal, prev + 1))} style={{ opacity: isAtLimit ? 0.4 : 1, cursor: isAtLimit ? 'not-allowed' : 'pointer' }}>+</button>
               </QuantityControl>
             </div>
             
             <AddToCartButton 
               onClick={handleAddToCart} 
-              disabled={product.stock === 0} 
+              disabled={stockVal === 0} 
               whileTap={{ scale: 0.98 }}
-              $outOfStock={product.stock === 0}
+              $outOfStock={stockVal === 0}
             >
-              <FaShoppingCart size={18} /> {product.stock === 0 ? 'Currently Unavailable' : 'Add to Cart'}
+              <FaShoppingCart size={18} /> {stockVal === 0 ? 'Currently Unavailable' : 'Add to Cart'}
             </AddToCartButton>
           </ActionCard>
         </InfoPane>
@@ -259,7 +265,7 @@ const ProductDetail = () => {
 export default ProductDetail;
 
 // ==========================================
-// COMPONENT STYLES (Cleaned of double-padding)
+// COMPONENT STYLES
 // ==========================================
 
 const ContentGrid = styled.div`
@@ -284,7 +290,6 @@ const ImagePane = styled(motion.div)`
   padding: 3rem;
   border: 1px solid rgba(11, 132, 87, 0.12);
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -297,16 +302,22 @@ const ImagePane = styled(motion.div)`
   }
 `;
 
-const StockBadge = styled.div`
-  position: absolute;
-  top: 1.5rem;
-  left: 1.5rem;
+const TopMetaRow = styled.div`
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`;
+
+const StockBadge = styled.div`
+  display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  padding: 0.4rem 1rem;
+  padding: 0.35rem 0.9rem;
   border-radius: 50px;
   background: ${props => props.$stock > 5 ? 'rgba(236, 253, 245, 0.9)' : props.$stock > 0 ? 'rgba(254, 243, 199, 0.9)' : 'rgba(254, 226, 226, 0.9)'};
   color: ${props => props.$stock > 5 ? '#047857' : props.$stock > 0 ? '#B45309' : '#B91C1C'};
@@ -343,7 +354,7 @@ const VendorTag = styled.div`
   gap: 0.5rem;
   color: #64748B;
   font-size: 0.95rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   
   svg { color: #0B8457; }
   strong { color: #0F172A; }
