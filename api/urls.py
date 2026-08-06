@@ -19,7 +19,7 @@ from .views import (
     ReviewViewSet,
     UserViewSet,
     VendorSalesViewSet,
-    WishlistViewSet,VerifyOTPView,RequestPasswordResetView,ConfirmPasswordResetView,DownloadInvoiceView
+    WishlistViewSet,VerifyOTPView,RequestPasswordResetView,ConfirmPasswordResetView,DownloadInvoiceView,razorpay_webhook
 )
 
 # Public API router
@@ -50,10 +50,11 @@ urlpatterns = [
     path('secure/api/', include(admin_router.urls)),  # protected admin-only API for React
     path('register/', RegisterView.as_view(), name='register'),
     path('token/', CookieTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'), 
+    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('password-reset/request/', RequestPasswordResetView.as_view(), name='password-reset-request'),
     path('password-reset/verify/', VerifyOTPView.as_view(), name='password-reset-verify'),
     path('password-reset/confirm/', ConfirmPasswordResetView.as_view(), name='password-reset-confirm'),
     path('orders/<int:order_id>/invoice/', DownloadInvoiceView.as_view(), name='download-invoice'),
+    path('webhooks/razorpay/', razorpay_webhook, name='razorpay-webhook'),
 ]

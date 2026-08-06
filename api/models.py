@@ -10,7 +10,7 @@ from django.db import models
 # USERS & ADDRESSES
 # ==========================================
 class User(AbstractUser):
-    email = models.EmailField(unique=True) 
+    email = models.EmailField(unique=True)
     ROLE_CHOICES = (
         ('user', 'Customer'),
         ('seller', 'Vendor / Seller'),
@@ -22,7 +22,7 @@ class User(AbstractUser):
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username'] 
+    REQUIRED_FIELDS = ['username']
 
     class Meta:
         # Index email and role for faster authentication and admin filtering
@@ -71,7 +71,7 @@ class Product(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
     price = models.DecimalField(
-        max_digits=10, 
+        max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))]
     )
@@ -168,7 +168,7 @@ class OrderItem(models.Model):
     # Vendor Fulfillment & Finance Architecture
     vendor = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='vendor_sales')
     status = models.CharField(max_length=20, choices=ITEM_STATUS_CHOICES, default='pending')
-    
+
     # The EazyShop Business Model (Platform takes 10%, Seller keeps 90%)
     platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     seller_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -178,13 +178,13 @@ class OrderItem(models.Model):
         if not self.pk: # Only calculate on creation
             price_decimal = Decimal(str(self.price))
             quantity_decimal = Decimal(str(self.quantity))
-            
+
             total_item_value = price_decimal * quantity_decimal
-            
+
             # EazyShop takes a flat 10% cut
             self.platform_fee = total_item_value * Decimal('0.10')
             self.seller_earnings = total_item_value - self.platform_fee
-            
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -244,18 +244,16 @@ class Coupon(models.Model):
         return self.code
 
 class Payment(models.Model):
-    PAYMENT_METHODS = (
-        ('credit_card', 'Credit Card'),
-        ('paypal', 'PayPal'),
-        ('wallet', 'Wallet')
-    )
     STATUS_CHOICES = (
         ('pending', 'Pending'),
         ('completed', 'Completed'),
         ('failed', 'Failed')
     )
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payment')
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
+
+    # 🚀 REMOVED choices=PAYMENT_METHODS, increased max_length to handle Razorpay's dynamic strings
+    payment_method = models.CharField(max_length=50, default='razorpay')
+
     transaction_id = models.CharField(max_length=100, unique=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')

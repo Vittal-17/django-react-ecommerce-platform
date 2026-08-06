@@ -3,6 +3,7 @@ import random
 import threading
 import time
 from datetime import date
+import razorpay
 
 from django.conf import settings
 from django.core.cache import cache
@@ -18,6 +19,8 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from .utils.pdf_generator import generate_invoice_pdf
 from django.db.models import Q
+from rest_framework import serializers
+import sys
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status, viewsets
@@ -415,6 +418,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 # ==========================================
 # 3. CART & ORDERS
 # ==========================================
+
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
@@ -430,34 +434,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return queryset.none()
 
-        # 🚀 FIX: Grant admins global access so detail endpoints (PATCH/GET) don't throw 404
         if getattr(user, 'role', '') == 'admin' or user.is_staff:
             return queryset.all()
 
-        # Regular users are strictly secured to their own personal orders
         return queryset.filter(user=user)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser], url_path='admin-all')
     def admin_all_orders(self, request):
-        """Dedicated secure endpoint strictly for the admin panel to view all global orders"""
         queryset = Order.objects.select_related('user').prefetch_related('order_items__product').order_by('-created_at')
-
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    def perform_create(self, serializer):
-        order = serializer.save(user=self.request.user)
-        self.send_order_status_email(order)
-
-        # Call centralized vendor notification
-        async_notify_vendors(order)
-
-        log_admin_action(self.request.user, f"New Order Placed: #{order.id} for ${order.total_price}")
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -466,7 +456,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_status = instance.status
 
-        # 🚀 ROBUST SECURITY: Prevent non-admin users from changing order statuses
         new_status = serializer.validated_data.get('status', old_status)
         if old_status != new_status and not is_admin:
             raise serializers.ValidationError({"status": "❌ Permission Denied: Only administrators can update order statuses."})
@@ -484,19 +473,11 @@ class OrderViewSet(viewsets.ModelViewSet):
     def _send_email_async(self, order_id):
         try:
             order = Order.objects.get(id=order_id)
-            payment = None
-            for _ in range(5):
-                payment = Payment.objects.filter(order=order).first()
-                if payment:
-                    break
-                time.sleep(1)
+            payment = Payment.objects.filter(order=order).first()
 
-            if payment:
-                payment_method_display = payment.get_payment_method_display()
-                transaction_id_display = payment.transaction_id or "Mock-TXN-Pending"
-            else:
-                payment_method_display = "Pending Payment"
-                transaction_id_display = "Awaiting System Confirmation"
+            # 🚀 FIXED: Removed .get_payment_method_display() since we removed model choices
+            payment_method_display = payment.payment_method.capitalize() if payment else "Razorpay Online"
+            transaction_id_display = payment.transaction_id if payment else "Verified Txn"
 
             send_order_email(
                 to_email=order.user.email,
@@ -515,8 +496,6 @@ class OrderViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         order = self.get_object()
 
-        # Optional check: Regular users can only cancel their own orders (handled by get_queryset anyway),
-        # but let's ensure the status is pending.
         if order.status != 'pending':
             return Response({"error": "Cannot cancel non-pending order."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -540,6 +519,119 @@ class OrderViewSet(viewsets.ModelViewSet):
         async_notify_cancellation(order)
 
         return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
+
+    # ==========================================
+    # BULLETPROOF RAZORPAY PAYMENT ACTIONS
+    # ==========================================
+    @action(detail=False, methods=['post'], url_path='create-razorpay-order')
+    def create_razorpay_order(self, request):
+        # 1. Create a Pending Django Order FIRST so webhooks can track it if browser drops
+        with transaction.atomic():
+            order = Order.objects.create(
+                user=request.user,
+                shipping_address=request.data.get('shipping_address'),
+                contact_phone=request.data.get('contact_phone'),
+                total_price=request.data.get('total_price'),
+                status='pending'
+            )
+
+            for item_data in request.data.get('order_items', []):
+                product = Product.objects.get(id=item_data['product'])
+
+                OrderItem.objects.create(
+                                    order=order,
+                                    product=product,
+                                    vendor=product.vendor,  # 🚀 FIX: Map the vendor to the order item!
+                                    quantity=item_data['quantity'],
+                                    price=item_data['price']
+                                )
+
+        # 2. Initialize Razorpay and hide our Django Order ID inside the session notes
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        amount_in_paise = int(float(order.total_price) * 100)
+
+        razorpay_order = client.order.create({
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "payment_capture": 1,
+            "notes": {
+                "django_order_id": order.id  # 🚀 The link between Razorpay and Django
+            }
+        })
+
+        return Response({
+            "order_id": order.id,
+            "razorpay_order_id": razorpay_order['id'],
+            "amount": razorpay_order['amount'],
+            "currency": razorpay_order['currency'],
+            "key_id": settings.RAZORPAY_KEY_ID
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='verify-razorpay-payment')
+    def verify_razorpay_payment(self, request):
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+        razorpay_order_id = request.data.get('razorpay_order_id')
+        razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_signature = request.data.get('razorpay_signature')
+        django_order_id = request.data.get('order_id')
+
+        # Here fetching payment_details is correct because we are calling the API
+        payment_details = client.payment.fetch(razorpay_payment_id)
+        actual_method = payment_details.get('method', 'razorpay')
+
+        try:
+            client.utility.verify_payment_signature({
+                'razorpay_order_id': razorpay_order_id,
+                'razorpay_payment_id': razorpay_payment_id,
+                'razorpay_signature': razorpay_signature
+            })
+
+            with transaction.atomic():
+                order = Order.objects.get(id=django_order_id, user=request.user)
+
+                payment, created = Payment.objects.get_or_create(
+                    order=order,
+                    defaults={
+                        'payment_method': actual_method,
+                        'transaction_id': razorpay_payment_id,
+                        'amount': order.total_price,
+                        'status': 'completed'
+                    }
+                )
+
+                if created:
+                    # 🚀 FIX 2: Strict indentation to prevent double-deducting stock
+                    if order.status == 'cancelled':
+                        order.status = 'pending'
+                        order.save()
+
+                        # Re-deduct the stock and un-cancel the items
+                        for item in order.order_items.all():
+                            item.status = 'pending'
+                            item.save()
+                            if item.product:
+                                product = Product.objects.select_for_update().get(id=item.product.id)
+                                product.stock -= item.quantity
+                                product.save()
+
+                    # Safely clear user's shopping cart (Happens for all successful payments)
+                    CartItem.objects.filter(cart__user=request.user).delete()
+
+            self.send_order_status_email(order)
+            # async_notify_vendors(order)
+            # log_admin_action(...)
+
+            return Response({
+                "success": True,
+                "message": "Payment verified successfully!",
+                "order_id": order.id,
+                "payment": PaymentSerializer(payment).data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"success": False, "message": str(e)}, status=400)
+
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):
@@ -866,3 +958,86 @@ class DownloadInvoiceView(APIView):
         except Exception as e:
             print(f"[PDF ERROR] {e}")
             return Response({"error": "Failed to generate invoice PDF."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+import json
+import razorpay
+from django.conf import settings
+from django.db import transaction
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def razorpay_webhook(request):
+    if request.method == "POST":
+        webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET
+        webhook_signature = request.headers.get('X-Razorpay-Signature', '')
+
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+        try:
+            client.utility.verify_webhook_signature(
+                request.body.decode('utf-8'),
+                webhook_signature,
+                webhook_secret
+            )
+        except razorpay.errors.SignatureVerificationError:
+            return HttpResponse(status=400)
+
+        payload = json.loads(request.body)
+        event = payload.get('event')
+        payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
+        django_order_id = payment_entity.get('notes', {}).get('django_order_id')
+
+        # 🚀 FIX 1: Extracted 'method' safely from the payment_entity dictionary
+        actual_method = payment_entity.get('method', 'razorpay')
+
+        if django_order_id:
+            with transaction.atomic():
+                order = Order.objects.filter(id=django_order_id).first()
+
+                if order:
+                    # 1. PAYMENT CAPTURED (Success or Retry Success)
+                    if event == 'payment.captured':
+                        transaction_id = payment_entity.get('id')
+
+                        if not Payment.objects.filter(transaction_id=transaction_id).exists():
+                            Payment.objects.create(
+                                order=order,
+                                payment_method=actual_method,
+                                transaction_id=transaction_id,
+                                amount=order.total_price,
+                                status='completed'
+                            )
+
+                            # Revive the order if a previous attempt failed
+                            if order.status == 'cancelled':
+                                order.status = 'pending'
+                                order.save()
+
+                                for item in order.order_items.all():
+                                    item.status = 'pending'
+                                    item.save()
+                                    if item.product:
+                                        product = Product.objects.select_for_update().get(id=item.product.id)
+                                        product.stock -= item.quantity
+                                        product.save()
+
+                            CartItem.objects.filter(cart__user=order.user).delete()
+
+                    # 2. PAYMENT FAILED (Declined / Dropped)
+                    elif event == 'payment.failed':
+                        if order.status == 'pending':
+                            order.status = 'cancelled'
+                            order.save()
+
+                            for item in order.order_items.all():
+                                item.status = 'cancelled'
+                                item.save()
+                                if item.product:
+                                    product = Product.objects.select_for_update().get(id=item.product.id)
+                                    product.stock += item.quantity
+                                    product.save()
+
+        return HttpResponse(status=200)
+    return HttpResponse(status=405)

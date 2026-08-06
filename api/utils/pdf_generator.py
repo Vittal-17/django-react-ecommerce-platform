@@ -10,13 +10,13 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from api.models import OrderItem
+from api.models import OrderItem, Payment  # 🚀 Added Payment import
 
 # 1. Persistent cache directory for lightning-fast subsequent PDF generations
 CACHE_DIR = os.path.join(settings.BASE_DIR, 'media', 'pdf_cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# 2. Blazing-fast connection session pool with a real browser User-Agent 
+# 2. Blazing-fast connection session pool with a real browser User-Agent
 # to prevent external e-commerce sites from blocking or throttling requests
 session = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
@@ -52,7 +52,7 @@ def get_product_image(item):
         # Check local cache first (Instant load on repeat downloads)
         url_hash = hashlib.md5(str(img_source).encode('utf-8')).hexdigest()
         cached_file_path = os.path.join(CACHE_DIR, f"{url_hash}.jpg")
-        
+
         if os.path.exists(cached_file_path):
             return RLImage(cached_file_path, width=32, height=32)
 
@@ -72,7 +72,7 @@ def get_product_image(item):
                     return RLImage(cached_file_path, width=32, height=32)
     except Exception as e:
         print(f"[PDF IMAGE ERROR] {e}")
-    
+
     return None
 
 def get_shop_logo():
@@ -80,49 +80,49 @@ def get_shop_logo():
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         local_path = os.path.join(current_dir, 'logo.png')
-        
+
         if os.path.exists(local_path):
             return RLImage(local_path, width=36, height=36)
-            
+
         fallback_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'logo.png')
         if os.path.exists(fallback_path):
             return RLImage(fallback_path, width=36, height=36)
     except Exception as e:
         print(f"[PDF LOGO ERROR] {e}")
-        
+
     return None
 
 def draw_ambient_glass_background(canvas, doc):
     """Paints an edge-to-edge ambient background and a floating glass card on every page."""
     canvas.saveState()
-    
+
     # 1. Edge-to-Edge Ambient Base Color
     canvas.setFillColor(colors.HexColor("#F0FDF4"))
     canvas.rect(0, 0, 612, 792, fill=1, stroke=0)
-    
+
     # 2. Ambient Glow Orbs
     canvas.setFillColor(colors.HexColor("#0B8457"))
     canvas.setFillAlpha(0.06)
     canvas.circle(600, 750, 250, fill=1, stroke=0)
     canvas.setFillAlpha(0.04)
     canvas.circle(50, 50, 300, fill=1, stroke=0)
-    
+
     # 3. Drop Shadow & Floating Glass Card
     canvas.setFillAlpha(0.12)
     canvas.setFillColor(colors.HexColor("#000000"))
     canvas.roundRect(28, 24, 556, 740, 24, fill=1, stroke=0)
-    
+
     canvas.setFillAlpha(1.0)
     canvas.setFillColor(colors.HexColor("#FFFFFF"))
     canvas.setStrokeColor(colors.HexColor("#A7F3D0"))
     canvas.setLineWidth(1)
     canvas.roundRect(26, 26, 560, 740, 24, fill=1, stroke=1)
-    
+
     canvas.restoreState()
 
 def generate_invoice_pdf(order):
     buffer = BytesIO()
-    
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
@@ -131,7 +131,7 @@ def generate_invoice_pdf(order):
         topMargin=56,
         bottomMargin=56
     )
-    
+
     elements = []
     styles = getSampleStyleSheet()
 
@@ -150,10 +150,10 @@ def generate_invoice_pdf(order):
     # 1. HEADER (Logo + Spaced Brand Text matching your email)
     logo_element = get_shop_logo()
     brand_text = Paragraph(
-        f"<font size=16 color='#0B8457'><b>EazyShop<font color='#0F172A'>.</font></b></font><br/><font color='#64748B' size=8>Secure Order Receipt</font>", 
+        f"<font size=16 color='#0B8457'><b>EazyShop<font color='#0F172A'>.</font></b></font><br/><font color='#64748B' size=8>Secure Order Receipt</font>",
         body_style
     )
-    
+
     if logo_element:
         brand_table = Table([[logo_element, '', brand_text]], colWidths=[0.45 * inch, 0.18 * inch, 2.84 * inch])
         brand_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (0,0), 'LEFT')]))
@@ -171,12 +171,35 @@ def generate_invoice_pdf(order):
     elements.append(Table([['']], colWidths=[6.94 * inch], rowHeights=[1], style=[('BACKGROUND', (0,0), (-1,-1), BORDER_COLOR)]))
     elements.append(Spacer(1, 15))
 
-    # 2. METADATA BLOCK
+    # 2. METADATA BLOCK & TRANSACTION DETAILS 🚀
     customer_name = getattr(order.user, 'username', 'Valued Customer')
     customer_email = getattr(order.user, 'email', 'N/A')
-    
-    billing_content = f"<b>Billed To:</b><br/><font size=10 color='#0F172A'><b>{customer_name}</b></font><br/><font color='#64748B'>{customer_email}</font>"
-    status_content = f"<b>Account Status:</b><br/>Payment: <font color='#0B8457'><b>Paid & Verified</b></font><br/>Fulfillment: <b>{order.status.capitalize()}</b>"
+
+    # Safely fetch the transaction details
+    payment = Payment.objects.filter(order=order).first()
+    payment_method = payment.payment_method.capitalize() if payment and payment.payment_method else "Razorpay Gateway"
+    transaction_id = payment.transaction_id if payment and payment.transaction_id else "N/A"
+
+        # 🚀 DYNAMIC PAYMENT STATUS LOGIC
+    if order.status.lower() == 'cancelled':
+        payment_status_html = "<font color='#E11D48'><b>Cancelled & Refunded</b></font>"
+    else:
+        payment_status_html = "<font color='#0B8457'><b>Paid & Verified</b></font>"
+
+    billing_content = f"""
+            <b>Billed To:</b><br/>
+            <font size=10 color='#0F172A'><b>{customer_name}</b></font><br/>
+            <font color='#64748B'>{customer_email}</font><br/><br/>
+            <b>Payment Method:</b><br/>
+            <font color='#0F172A'>{payment_method}</font>
+        """
+
+    status_content = f"""
+            Payment: {payment_status_html}<br/>
+            Fulfillment: <b>{order.status.capitalize()}</b><br/><br/>
+            <b>Transaction ID:</b><br/>
+            <font color='#64748B' size=9>{transaction_id}</font>
+        """
 
     meta_table = Table([[Paragraph(billing_content, body_style), Paragraph(status_content, body_style)]], colWidths=[3.47 * inch, 3.47 * inch])
     meta_table.setStyle(TableStyle([
@@ -196,7 +219,7 @@ def generate_invoice_pdf(order):
         Paragraph("Price", white_bold_body),
         Paragraph("Total", white_bold_body),
     ]
-    
+
     table_rows = [table_headers]
     order_items = list(OrderItem.objects.filter(order=order))
 
@@ -216,7 +239,7 @@ def generate_invoice_pdf(order):
         qty = int(item.quantity)
         price_val = float(item.price)
         total_val = qty * price_val
-        
+
         img_cell = item_images.get(item)
         if not img_cell:
             img_cell = Paragraph("<font color='#94A3B8' size=8>No Image</font>", body_style)
@@ -254,7 +277,7 @@ def generate_invoice_pdf(order):
         ["Shipping & Handling:", f"${shipping_fee:.2f}"],
         ["Grand Total:", f"${grand_total:.2f}"]
     ]
-    
+
     totals_table_rows = []
     for label, val in totals_data:
         is_grand = "Grand" in label
@@ -277,7 +300,7 @@ def generate_invoice_pdf(order):
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('ALIGN', (1,0), (1,0), 'RIGHT'),
     ]))
-    
+
     elements.append(totals_wrapper)
     elements.append(Spacer(1, 25))
 

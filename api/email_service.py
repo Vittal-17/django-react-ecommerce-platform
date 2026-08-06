@@ -161,6 +161,10 @@ def send_order_email(to_email, username, order_id, status, total, payment_method
                     <td style="padding: 12px 0; text-align: right; border-bottom: 1px dashed #cbd5e1; font-weight: 500;">{payment_method}</td>
                 </tr>
                 <tr>
+                    <td style="padding: 12px 0; border-bottom: 1px dashed #cbd5e1; color: #64748b;">Transaction ID</td>
+                    <td style="padding: 12px 0; text-align: right; border-bottom: 1px dashed #cbd5e1; font-weight: 600; font-family: monospace; font-size: 13px; color: #475569;">{txn_id}</td>
+                </tr>
+                <tr>
                     <td style="padding: 12px 0; border-bottom: 2px solid #e2e8f0; color: #64748b;">Delivery To</td>
                     <td style="padding: 12px 0; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 14px; line-height: 1.4;">{address}</td>
                 </tr>
@@ -180,13 +184,11 @@ def send_order_email(to_email, username, order_id, status, total, payment_method
     return _send_html_email(to_email, subject, html)
 
 def send_vendor_new_order_email(to_email, username, order_id, items_list, total_earnings, customer_name, address):
-    """Fired when a customer purchases a vendor's products (Consolidated)."""
     theme_color = "#8B5CF6" 
     icon = "💰"
     header_title = "New Sale!"
     subject = f"Cha-ching! New Sale on EazyShop - Order #{order_id}"
     
-    # Dynamically build the rows for all items the vendor sold in this order
     items_html = ""
     for item in items_list:
         items_html += f"""
@@ -231,7 +233,6 @@ def send_vendor_new_order_email(to_email, username, order_id, items_list, total_
     return _send_html_email(to_email, subject, html)
 
 def send_vendor_product_status_email(to_email, username, product_name, status, admin_note=""):
-    """Fired when an admin approves or rejects a vendor's product submission."""
     status = status.lower()
     
     if status == 'approved':
@@ -273,7 +274,6 @@ def send_vendor_product_status_email(to_email, username, product_name, status, a
 # ==========================================
 
 def _safe_async_dispatch(target_func, *args, **kwargs):
-    """Universal graceful fallback wrapper for background emails"""
     def wrapper():
         try:
             target_func(*args, **kwargs)
@@ -281,7 +281,6 @@ def _safe_async_dispatch(target_func, *args, **kwargs):
             print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
     if 'test' in sys.argv:
-        # Run synchronously during tests to prevent SQLite locks and race conditions
         try:
             target_func(*args, **kwargs)
         except Exception as e:
@@ -290,9 +289,6 @@ def _safe_async_dispatch(target_func, *args, **kwargs):
         threading.Thread(target=wrapper).start()
 
 def async_notify_vendors(order):
-    """Extracts primitives safely, groups by vendor, and dispatches consolidated notifications"""
-    
-    # 1. Group items by vendor email
     vendor_groups = defaultdict(lambda: {'username': '', 'items': [], 'total_earnings': 0.0})
     
     for item in order.order_items.all():
@@ -303,14 +299,12 @@ def async_notify_vendors(order):
                 'product_name': item.product.name if item.product else 'Product',
                 'quantity': item.quantity
             })
-            # Tally up the earnings for this specific vendor
             vendor_groups[email]['total_earnings'] += float(item.seller_earnings or 0)
 
     customer_username = order.user.username
     order_id = order.id
     shipping_address = order.shipping_address or 'Saved Address'
 
-    # 2. Send ONE email per vendor with all their items grouped together
     def send_emails():
         for vendor_email, data in vendor_groups.items():
             try:
@@ -329,7 +323,6 @@ def async_notify_vendors(order):
     _safe_async_dispatch(send_emails)
 
 def async_notify_customer_status(item):
-    """Extracts primitives safely and dispatches customer status update notifications"""
     order = item.order
     payment = Payment.objects.filter(order=order).first()
     
@@ -340,7 +333,8 @@ def async_notify_customer_status(item):
     total_price = str(order.total_price)
     address = order.shipping_address or 'Saved Address'
     
-    payment_method_display = payment.get_payment_method_display() if payment else "Completed"
+    # 🚀 Dynamically extract the method since we removed choices
+    payment_method_display = payment.payment_method.capitalize() if payment else "Completed"
     transaction_id_display = payment.transaction_id if (payment and payment.transaction_id) else "System Confirmed"
 
     def send_email():
@@ -361,9 +355,6 @@ def async_notify_customer_status(item):
     _safe_async_dispatch(send_email)
 
 def async_notify_cancellation(order):
-    """Extracts primitives safely, groups by vendor, and dispatches consolidated cancellation notifications"""
-    
-    # 1. Group cancelled items by vendor email
     vendor_groups = defaultdict(lambda: {'username': '', 'products': []})
     
     for item in order.order_items.all():
@@ -374,12 +365,10 @@ def async_notify_cancellation(order):
 
     order_id = order.id
 
-    # 2. Send ONE cancellation email per vendor listing all their cancelled items
     def send_cancellation_emails():
         for vendor_email, data in vendor_groups.items():
             subject = f"Notice: Order #{order_id} has been Cancelled"
             
-            # Format the cancelled products into a clean HTML list
             products_list = "".join([f"<li style='margin-bottom: 8px;'>{p}</li>" for p in data['products']])
             
             body = f"""
@@ -396,7 +385,6 @@ def async_notify_cancellation(order):
             """
             
             try:
-                # Upgraded to use your premium template layout
                 html = get_base_template("#E11D48", "Order Cancelled", "❌", body)
                 _send_html_email(vendor_email, subject, html)
             except Exception as e:

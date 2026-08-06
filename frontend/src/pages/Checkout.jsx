@@ -3,7 +3,7 @@ import { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { FaCreditCard, FaPaypal, FaWallet, FaMapMarkerAlt, FaLock, FaCheckCircle, FaExclamationCircle, FaPhoneAlt, FaShieldAlt, FaArrowLeft, FaBoxOpen } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaLock, FaCheckCircle, FaExclamationCircle, FaPhoneAlt, FaShieldAlt, FaArrowLeft, FaBoxOpen } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { useNavigate, Link } from 'react-router-dom';
 import { SkeletonRow } from '../components/SkeletonLoader';
@@ -13,13 +13,12 @@ import AppLayout from '../components/AppLayout';
 const Checkout = () => {
   const { axiosInstance, user } = useContext(AuthContext);
   const navigate = useNavigate();
-  
+
   const [cartItems, setCartItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [contactPhone, setContactPhone] = useState('');
-  
-  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+
   const [loading, setLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
 
@@ -43,7 +42,7 @@ const Checkout = () => {
 
         const addrRes = await axiosInstance.get('/api/addresses/');
         setAddresses(addrRes.data);
-        
+
         const defaultAddr = addrRes.data.find(a => a.is_default);
         if (defaultAddr) setSelectedAddressId(defaultAddr.id);
         else if (addrRes.data.length > 0) setSelectedAddressId(addrRes.data[0].id);
@@ -62,53 +61,111 @@ const Checkout = () => {
     if (!selectedAddressId) return toast.error('⚠️ Please select a delivery address!');
     if (!contactPhone.trim()) return toast.error('⚠️ A contact phone number is compulsory!');
     if (cartItems.length === 0) return toast.error('⚠️ Your cart is empty!');
-
+  
+    // Safety check to ensure Razorpay script loaded successfully
+    if (typeof window.Razorpay === 'undefined') {
+      toast.error('❌ Razorpay SDK failed to load. Disable adblockers for localhost.');
+      setLoading(false);
+      return;
+    }
+  
     setLoading(true);
     try {
       const selectedAddr = addresses.find(a => a.id === selectedAddressId);
       const addressSnapshot = `${selectedAddr.label}: ${selectedAddr.full_address}`;
-
-      const orderRes = await axiosInstance.post('/api/orders/', {
+      const payloadTotalPrice = cartTotal.toFixed(2);
+      const payloadOrderItems = cartItems.map(item => ({
+        product: item.product?.id || item.product,
+        quantity: item.quantity,
+        price: Number(item.price),
+      }));
+  
+      // 1. Create the pending Django order & get Razorpay session details
+      const orderRes = await axiosInstance.post('/api/orders/create-razorpay-order/', {
         shipping_address: addressSnapshot,
         contact_phone: contactPhone,
-        total_price: cartTotal.toFixed(2),
-        order_items: cartItems.map(item => ({
-          product: item.product?.id || item.product,
-          quantity: item.quantity,
-          price: Number(item.price),
-        })),
+        total_price: payloadTotalPrice,
+        order_items: payloadOrderItems,
       });
   
-      const order = orderRes.data;
+      const orderData = orderRes.data;
   
-      setTimeout(async () => {
-        try {
-          const paymentRes = await axiosInstance.post('/api/payments/', {
-            order: order.id,
-            payment_method: paymentMethod,
-            transaction_id: `txn_${Date.now()}`,
-            amount: order.total_price,
-            status: 'completed',
-          });
+      // 2. Configure Razorpay Modal Options
+      const options = {
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "EazyShop",
+        description: "Secure Order Checkout",
+        order_id: orderData.razorpay_order_id,
+        handler: async function (response) {
+          try {
+            // 3. Verify payment signature & finalize payment record in backend
+            const verifyRes = await axiosInstance.post('/api/orders/verify-razorpay-payment/', {
+              order_id: orderData.order_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
   
-          toast.success('📦 Order placed successfully!');
-          navigate(`/order-success/${order.id}`, {
-            state: { order, payment: paymentRes.data, userAddress: addressSnapshot, userPhone: contactPhone }
-          });
-          
-        } catch (err) {
-          console.error('Payment failed:', err);
-          toast.error('❌ Payment processing failed');
-          setLoading(false);
-        } 
-      }, 2500); 
-
+            if (verifyRes.data.success) {
+              toast.success('📦 Payment verified & Order placed successfully!');
+              navigate(`/order-success/${verifyRes.data.order_id}`, {
+                state: {
+                  order: { total_price: payloadTotalPrice },
+                  payment: verifyRes.data.payment,
+                  userAddress: addressSnapshot,
+                  userPhone: contactPhone
+                }
+              });
+            } else {
+              toast.error('❌ Payment verification failed');
+              setLoading(false);
+            }
+          } catch (err) {
+            console.error('Verification error:', err);
+            toast.error('❌ Error verifying payment with server');
+            setLoading(false);
+          }
+        },
+        prefill: {
+          name: user?.username || "Customer",
+          email: user?.email || "",
+          contact: contactPhone,
+        },
+        theme: {
+          color: "#0B8457"
+        },
+        modal: {
+          // 🚀 UPGRADE: Catch the user closing the modal abruptly and cancel the pending order
+          ondismiss: async function() {
+            setLoading(false);
+            toast("Payment cancelled by user", { icon: '⚠️' });
+            
+            try {
+              await axiosInstance.post(`/api/orders/${orderData.order_id}/cancel/`);
+              console.log(`Order ${orderData.order_id} cancelled due to modal dismissal.`);
+            } catch (cancelErr) {
+              console.error('Failed to cancel abandoned order:', cancelErr);
+            }
+          }
+        }
+      };
+  
+      const rzp = new window.Razorpay(options);
+      
+      rzp.on('payment.failed', function (response) {
+        console.warn("Payment failed at gateway:", response.error.description);
+      });
+  
+      rzp.open();
+  
     } catch (err) {
-      const serverMsg = err.response?.data?.non_field_errors?.[0] || err.response?.data?.detail || 'Failed to place order';
+      const serverMsg = err.response?.data?.message || err.response?.data?.detail || 'Failed to initialize payment';
       toast.error(`❌ ${serverMsg}`);
       setLoading(false);
     }
-  };  
+  };
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0);
 
@@ -173,7 +230,6 @@ const Checkout = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 <SkeletonRow style={{ height: '200px', borderRadius: '24px' }} />
                 <SkeletonRow style={{ height: '250px', borderRadius: '24px' }} />
-                <SkeletonRow style={{ height: '150px', borderRadius: '24px' }} />
               </div>
             ) : (
               <ContentGrid as={motion.div} variants={containerVariants} initial="hidden" animate="visible">
@@ -197,7 +253,7 @@ const Checkout = () => {
 
                 <GlassSection variants={itemVariants}>
                   <SectionHeader><FaMapMarkerAlt color="#0B8457" /> Delivery Details</SectionHeader>
-                  
+
                   {addresses.length === 0 ? (
                     <WarningBox>
                       <FaExclamationCircle size={24} />
@@ -217,7 +273,7 @@ const Checkout = () => {
                               </SelectedBadge>
                             )}
                           </AnimatePresence>
-                          
+
                           <div className="card-header">
                             <div className="icon-box"><FaMapMarkerAlt /></div>
                             <div className="label-row">
@@ -242,21 +298,6 @@ const Checkout = () => {
                     </LockedField>
                     <p className="helper-text">This number is pulled securely from your verified account profile.</p>
                   </ContactInputWrapper>
-                </GlassSection>
-
-                <GlassSection variants={itemVariants}>
-                  <SectionHeader><FaCreditCard color="#0B8457" /> Payment Method</SectionHeader>
-                  <PaymentOptions>
-                    <PaymentOption $active={paymentMethod === 'credit_card'} onClick={() => setPaymentMethod('credit_card')} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                      <FaCreditCard className="icon" /> <span>Credit Card</span>
-                    </PaymentOption>
-                    <PaymentOption $active={paymentMethod === 'paypal'} onClick={() => setPaymentMethod('paypal')} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                      <FaPaypal className="icon" /> <span>PayPal</span>
-                    </PaymentOption>
-                    <PaymentOption $active={paymentMethod === 'wallet'} onClick={() => setPaymentMethod('wallet')} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                      <FaWallet className="icon" /> <span>Digital Wallet</span>
-                    </PaymentOption>
-                  </PaymentOptions>
                 </GlassSection>
 
                 <TotalSection variants={itemVariants}>
@@ -391,20 +432,6 @@ const LockedField = styled.div`
   border: 1px solid #E2E8F0; border-radius: 12px; font-size: 1.05rem; color: #64748B; font-weight: 600;
   display: flex; align-items: center; gap: 0.8rem; cursor: not-allowed; user-select: none; overflow: hidden; word-wrap: break-word;
   .lock-icon { color: #94A3B8; flex-shrink: 0; }
-`;
-
-const PaymentOptions = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;
-  @media (max-width: 480px) { grid-template-columns: 1fr; }
-`;
-
-const PaymentOption = styled(motion.button)`
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8rem;
-  padding: 1.5rem 1rem; background: ${props => props.$active ? 'rgba(11, 132, 87, 0.04)' : '#ffffff'};
-  border: 2px solid ${props => props.$active ? '#0B8457' : '#E2E8F0'}; border-radius: 16px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
-  .icon { font-size: 2rem; color: ${props => props.$active ? '#0B8457' : '#64748B'}; }
-  span { color: ${props => props.$active ? '#0F172A' : '#475569'}; font-weight: 700; font-size: 0.95rem; }
-  @media (max-width: 480px) { flex-direction: row; padding: 1rem; .icon { font-size: 1.5rem; } }
 `;
 
 const TotalSection = styled(GlassSection)`

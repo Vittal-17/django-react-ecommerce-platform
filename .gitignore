@@ -76,3 +76,6 @@ coverage/
 
 *.swp
 *.swo
+*Dockerfile
+*.yml
+*.conf
