@@ -2,6 +2,11 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    GiftCardPurchaseView,
+    GiftCardVerifyPurchaseView,
+    GiftCardCheckView,
+    GiftCardListView,
+    GiftCardRedeemView,
     AddressViewSet,
     AdminLogViewSet,
     CartItemViewSet,
@@ -46,6 +51,11 @@ admin_router.register(r'products', ProductViewSet, basename='admin-products')
 admin_router.register(r'orders', OrderViewSet, basename='admin-orders')
 
 urlpatterns = [
+    path('gift-cards/', GiftCardListView.as_view(), name='gift-card-list'),
+    path('gift-cards/redeem/', GiftCardRedeemView.as_view(), name='gift-card-redeem'),
+    path('gift-cards/check/', GiftCardCheckView.as_view(), name='gift-card-check'),
+    path('gift-cards/purchase/', GiftCardPurchaseView.as_view(), name='gift-card-purchase'),
+    path('gift-cards/verify/', GiftCardVerifyPurchaseView.as_view(), name='gift-card-verify'),
     path('', include(router.urls)),  # public API
     path('secure/api/', include(admin_router.urls)),  # protected admin-only API for React
     path('register/', RegisterView.as_view(), name='register'),

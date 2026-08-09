@@ -4,6 +4,12 @@ import threading
 import time
 from datetime import date
 import razorpay
+from decimal import Decimal
+
+import qrcode
+import cloudinary.uploader
+import io
+import uuid
 
 from django.conf import settings
 from django.core.cache import cache
@@ -57,6 +63,8 @@ from .models import (
     Review,
     User,
     Wishlist,
+    GiftCard,
+    GiftCardTransaction,
 )
 from .permissions import (
     IsAdminOrOwner,
@@ -385,7 +393,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
         auto_status = 'approved' if getattr(user, 'role', '') == 'admin' else 'pending'
         instance = serializer.save(vendor=user, approval_status=auto_status)
-        log_admin_action(self.request.user, f"Created Product: '{instance.name}' at ${instance.price} (Status: {auto_status})")
+        log_admin_action(self.request.user, f"Created Product: '{instance.name}' at ₹{instance.price} (Status: {auto_status})")
 
     def perform_update(self, serializer):
         instance = self.get_object()
@@ -393,7 +401,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         new_instance = serializer.save()
 
         changes = []
-        if old_price != new_instance.price: changes.append(f"Price: ${old_price} -> ${new_instance.price}")
+        if old_price != new_instance.price: changes.append(f"Price: ₹{old_price} -> ₹{new_instance.price}")
         if old_stock != new_instance.stock: changes.append(f"Stock: {old_stock} -> {new_instance.stock}")
         if old_name != new_instance.name: changes.append(f"Name: {old_name} -> {new_instance.name}")
 
@@ -525,7 +533,8 @@ class OrderViewSet(viewsets.ModelViewSet):
     # ==========================================
     @action(detail=False, methods=['post'], url_path='create-razorpay-order')
     def create_razorpay_order(self, request):
-        # 1. Create a Pending Django Order FIRST so webhooks can track it if browser drops
+        use_wallet = request.data.get('use_wallet') == True
+
         with transaction.atomic():
             order = Order.objects.create(
                 user=request.user,
@@ -537,26 +546,79 @@ class OrderViewSet(viewsets.ModelViewSet):
 
             for item_data in request.data.get('order_items', []):
                 product = Product.objects.get(id=item_data['product'])
-
                 OrderItem.objects.create(
                                     order=order,
                                     product=product,
-                                    vendor=product.vendor,  # 🚀 FIX: Map the vendor to the order item!
+                                    vendor=product.vendor,
                                     quantity=item_data['quantity'],
                                     price=item_data['price']
                                 )
 
+            total_price = Decimal(str(order.total_price))
+            remaining_amount = total_price
+            wallet_deducted = Decimal('0.00')
+
+            # We need a select_for_update to lock the user row to prevent race conditions on wallet balance
+            user = User.objects.select_for_update().get(id=request.user.id)
+
+            if use_wallet and user.wallet_balance > 0:
+                if user.wallet_balance >= total_price:
+                    # Full coverage by wallet
+                    wallet_deducted = total_price
+                    user.wallet_balance -= total_price
+                    user.save()
+
+                    order.status = 'processing'
+                    order.save()
+
+                    unique_txn_id = f"TXN-WALLET-{uuid.uuid4().hex[:8].upper()}"
+
+                    payment = Payment.objects.create(
+                        order=order,
+                        payment_method='wallet',
+                        transaction_id=unique_txn_id,
+                        amount=total_price,
+                        status='completed'
+                    )
+
+                    for item in order.order_items.all():
+                        item.product.stock -= item.quantity
+                        item.product.save()
+                        item.status = 'processing'
+                        item.save()
+
+                    CartItem.objects.filter(cart__user=request.user).delete()
+                    self.send_order_status_email(order)
+
+                    return Response({
+                        "order_id": order.id,
+                        "payment_complete": True,
+                        "message": "Paid fully with Wallet Balance.",
+                        "payment": PaymentSerializer(payment).data
+                    }, status=status.HTTP_201_CREATED)
+                else:
+                    # Partial coverage
+                    wallet_deducted = user.wallet_balance
+                    remaining_amount = total_price - wallet_deducted
+                    # Don't deduct from user here yet! We deduct in verify_razorpay_payment or we can deduct here.
+                    # It's safer to just pass it in notes and let verify do it, or lock here.
+                    # Actually, we shouldn't deduct until payment succeeds.
+
         # 2. Initialize Razorpay and hide our Django Order ID inside the session notes
         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-        amount_in_paise = int(float(order.total_price) * 100)
+        amount_in_paise = int(remaining_amount * 100)
+
+        notes = {
+            "django_order_id": order.id
+        }
+        if use_wallet and wallet_deducted > 0:
+            notes["wallet_deducted"] = str(wallet_deducted)
 
         razorpay_order = client.order.create({
             "amount": amount_in_paise,
             "currency": "INR",
             "payment_capture": 1,
-            "notes": {
-                "django_order_id": order.id  # 🚀 The link between Razorpay and Django
-            }
+            "notes": notes
         })
 
         return Response({
@@ -589,13 +651,33 @@ class OrderViewSet(viewsets.ModelViewSet):
 
             with transaction.atomic():
                 order = Order.objects.get(id=django_order_id, user=request.user)
+                user = User.objects.select_for_update().get(id=request.user.id)
+
+                wallet_deducted_str = payment_details.get('notes', {}).get('wallet_deducted')
+                if wallet_deducted_str:
+                    wallet_deducted = Decimal(wallet_deducted_str)
+                    if wallet_deducted > 0:
+                        if user.wallet_balance >= wallet_deducted:
+                            user.wallet_balance -= wallet_deducted
+                            user.save()
+    
+                            # We also register a separate payment record for the wallet portion
+                            Payment.objects.create(
+                                order=order,
+                                payment_method='wallet',
+                                transaction_id=f'wallet_{uuid.uuid4().hex[:8]}_split',
+                                amount=wallet_deducted,
+                                status='completed'
+                            )
+                        else:
+                            return Response({"success": False, "message": "Payment verification failed: Insufficient wallet balance to fulfill split payment deduction."}, status=status.HTTP_400_BAD_REQUEST)
 
                 payment, created = Payment.objects.get_or_create(
                     order=order,
                     defaults={
                         'payment_method': actual_method,
                         'transaction_id': razorpay_payment_id,
-                        'amount': order.total_price,
+                        'amount': Decimal(str(payment_details.get('amount', 0))) / 100, # actual amount paid via razorpay
                         'status': 'completed'
                     }
                 )
@@ -1041,3 +1123,138 @@ def razorpay_webhook(request):
 
         return HttpResponse(status=200)
     return HttpResponse(status=405)
+
+
+class GiftCardPurchaseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        amount = request.data.get('amount')
+        if not amount:
+            return Response({'error': 'Amount is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            amount = Decimal(str(amount))
+        except:
+            return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create Razorpay order
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        order_data = {
+            'amount': int(amount * 100),
+            'currency': 'INR',
+            'receipt': f'gc_receipt_{request.user.id}'
+        }
+        rzp_order = client.order.create(data=order_data)
+
+        return Response({
+            'order_id': rzp_order['id'],
+            'amount': amount,
+            'key': settings.RAZORPAY_KEY_ID
+        }, status=status.HTTP_200_OK)
+
+class GiftCardVerifyPurchaseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_order_id = request.data.get('razorpay_order_id')
+        razorpay_signature = request.data.get('razorpay_signature')
+        amount = request.data.get('amount')
+
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+        try:
+            client.utility.verify_payment_signature({
+                'razorpay_order_id': razorpay_order_id,
+                'razorpay_payment_id': razorpay_payment_id,
+                'razorpay_signature': razorpay_signature
+            })
+
+            # Signature verified. Create Gift Card inside an atomic block for safety
+            with transaction.atomic():
+                gc = GiftCard.objects.create(
+                    owner=None,
+                    initial_balance=amount,
+                    current_balance=amount
+                )
+
+                GiftCardTransaction.objects.create(
+                    gift_card=gc,
+                    transaction_type='ISSUE',
+                    amount=amount,
+                    user=request.user
+                )
+
+                # Generate QR Code
+                qr = qrcode.QRCode(version=1, box_size=10, border=5)
+                qr.add_data(str(gc.id))
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+
+                img_io = io.BytesIO()
+                img.save(img_io, format='PNG')
+                img_io.seek(0)
+
+                upload_res = cloudinary.uploader.upload(img_io, folder="gift_cards")
+                gc.qr_code_url = upload_res.get('secure_url')
+                gc.save()
+
+            return Response({
+                'message': 'Gift card purchased successfully',
+                'gift_card_id': gc.id,
+                'qr_url': gc.qr_code_url
+            }, status=status.HTTP_201_CREATED)
+
+        except razorpay.errors.SignatureVerificationError:
+            return Response({'error': 'Invalid payment signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+class GiftCardCheckView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        gift_card_id = request.data.get('gift_card_id')
+        try:
+            gc = GiftCard.objects.get(id=gift_card_id, is_active=True)
+            if gc.owner is not None and gc.owner != request.user:
+                return Response({"error": "Unauthorized or invalid gift card."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'balance': gc.current_balance}, status=status.HTTP_200_OK)
+        except GiftCard.DoesNotExist:
+            return Response({'error': 'Invalid or inactive gift card'}, status=status.HTTP_400_BAD_REQUEST)
+
+class GiftCardListView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        gcs = GiftCard.objects.filter(owner=request.user)
+        return Response([{'id': gc.id, 'balance': gc.current_balance, 'qr': gc.qr_code_url, 'active': gc.is_active} for gc in gcs], status=status.HTTP_200_OK)
+
+class GiftCardRedeemView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        gift_card_id = request.data.get('gift_card_id')
+        try:
+            with transaction.atomic():
+                gc = GiftCard.objects.select_for_update().get(Q(owner=None) | Q(owner=request.user), id=gift_card_id, is_active=True)
+                user = User.objects.select_for_update().get(id=request.user.id)
+                if gc.current_balance > 0:
+                    amount_to_add = gc.current_balance
+                    user.wallet_balance += amount_to_add
+                    user.save()
+                    
+                    gc.owner = user
+                    gc.current_balance = Decimal('0.00')
+                    gc.is_active = False
+                    gc.save()
+                    
+                    GiftCardTransaction.objects.create(
+                        gift_card=gc,
+                        transaction_type='REDEEM',
+                        amount=amount_to_add,
+                        user=user
+                    )
+                    
+                    return Response({'message': f'Successfully added {amount_to_add} to wallet balance.'}, status=status.HTTP_200_OK)
+                else:
+                    return Response({'error': 'Gift card has zero balance.'}, status=status.HTTP_400_BAD_REQUEST)
+        except GiftCard.DoesNotExist:
+            return Response({'error': 'Invalid or inactive gift card.'}, status=status.HTTP_400_BAD_REQUEST)

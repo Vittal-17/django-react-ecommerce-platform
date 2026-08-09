@@ -1,3 +1,4 @@
+from api.utils.currency_format import format_inr
 # email_service.py
 import sys
 import threading
@@ -170,7 +171,7 @@ def send_order_email(to_email, username, order_id, status, total, payment_method
                 </tr>
                 <tr>
                     <td style="padding: 18px 0 0 0; color: #0f172a; font-weight: 700; font-size: 16px;">Total Amount</td>
-                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #0f172a;">${total}</td>
+                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #0f172a;">{format_inr(total)}</td>
                 </tr>
             </table>
         </div>
@@ -219,7 +220,7 @@ def send_vendor_new_order_email(to_email, username, order_id, items_list, total_
                 </tr>
                 <tr>
                     <td style="padding: 18px 0 0 0; color: #0f172a; font-weight: 700; font-size: 16px;">Your Earnings</td>
-                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #10B981;">${total_earnings:.2f}</td>
+                    <td style="padding: 18px 0 0 0; text-align: right; font-weight: 900; font-size: 22px; color: #10B981;">{format_inr(total_earnings)}</td>
                 </tr>
             </table>
         </div>

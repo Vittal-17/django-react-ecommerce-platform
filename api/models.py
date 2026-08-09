@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
@@ -18,6 +19,7 @@ class User(AbstractUser):
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     phone = models.CharField(max_length=20, blank=True, null=True, unique=True)
+    wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     created_at = models.DateTimeField(auto_now_add=True)
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
@@ -282,3 +284,36 @@ class AdminLog(models.Model):
 
     def __str__(self):
         return f"Admin {self.admin.username}: {self.action}"
+
+
+# ==========================================
+# GIFT CARDS
+# ==========================================
+class GiftCard(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='gift_cards', null=True, blank=True)
+    initial_balance = models.DecimalField(max_digits=10, decimal_places=2)
+    current_balance = models.DecimalField(max_digits=10, decimal_places=2)
+    qr_code_url = models.URLField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"GiftCard {self.id} - Balance: {self.current_balance}"
+
+class GiftCardTransaction(models.Model):
+    TYPE_CHOICES = (
+        ('ISSUE', 'Issue'),
+        ('REDEEM', 'Redeem'),
+        ('REFUND', 'Refund'),
+    )
+    gift_card = models.ForeignKey(GiftCard, on_delete=models.CASCADE, related_name='transactions')
+    transaction_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.transaction_type} of {self.amount} on {self.gift_card.id}"

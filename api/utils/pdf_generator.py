@@ -26,6 +26,14 @@ session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 })
 
+def format_pdf_inr(amount):
+    """Safe INR formatter for ReportLab standard fonts to prevent black square glyph errors."""
+    try:
+        numeric_amount = float(amount or 0)
+    except (ValueError, TypeError):
+        numeric_amount = 0.00
+    return f"Rs. {numeric_amount:,.2f}"
+
 def get_product_image(item):
     """Fetch product image with local disk caching and session pooling."""
     try:
@@ -180,7 +188,7 @@ def generate_invoice_pdf(order):
     payment_method = payment.payment_method.capitalize() if payment and payment.payment_method else "Razorpay Gateway"
     transaction_id = payment.transaction_id if payment and payment.transaction_id else "N/A"
 
-        # 🚀 DYNAMIC PAYMENT STATUS LOGIC
+    # 🚀 DYNAMIC PAYMENT STATUS LOGIC
     if order.status.lower() == 'cancelled':
         payment_status_html = "<font color='#E11D48'><b>Cancelled & Refunded</b></font>"
     else:
@@ -248,8 +256,8 @@ def generate_invoice_pdf(order):
             img_cell,
             Paragraph(product_name, body_style),
             Paragraph(str(qty), body_style),
-            Paragraph(f"${price_val:.2f}", body_style),
-            Paragraph(f"${total_val:.2f}", bold_body)
+            Paragraph(format_pdf_inr(price_val), body_style),
+            Paragraph(format_pdf_inr(total_val), bold_body)
         ])
 
     item_table = Table(table_rows, colWidths=[0.8 * inch, 2.74 * inch, 0.6 * inch, 1.2 * inch, 1.6 * inch])
@@ -273,9 +281,9 @@ def generate_invoice_pdf(order):
     grand_total = subtotal + shipping_fee
 
     totals_data = [
-        ["Subtotal:", f"${subtotal:.2f}"],
-        ["Shipping & Handling:", f"${shipping_fee:.2f}"],
-        ["Grand Total:", f"${grand_total:.2f}"]
+        ["Subtotal:", format_pdf_inr(subtotal)],
+        ["Shipping & Handling:", format_pdf_inr(shipping_fee)],
+        ["Grand Total:", format_pdf_inr(grand_total)]
     ]
 
     totals_table_rows = []

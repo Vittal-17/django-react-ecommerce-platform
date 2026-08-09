@@ -53,6 +53,7 @@ python-socketio==5.16.3
 pytz==2025.2
 PyYAML==6.0.3
 pyzmq==27.1.0
+qrcode==8.2
 razorpay==2.0.1
 reportlab==5.0.0
 requests==2.32.5

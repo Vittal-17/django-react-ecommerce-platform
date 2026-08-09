@@ -3,12 +3,14 @@ import { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
 import AuthContext from '../context/AuthContext';
-import { FaMapMarkerAlt, FaLock, FaCheckCircle, FaExclamationCircle, FaPhoneAlt, FaShieldAlt, FaArrowLeft, FaBoxOpen } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaLock, FaCheckCircle, FaExclamationCircle, FaPhoneAlt, FaShieldAlt, FaArrowLeft, FaBoxOpen, FaGift } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
 import { useNavigate, Link } from 'react-router-dom';
 import { SkeletonRow } from '../components/SkeletonLoader';
 import { PageHeader, GlowingPageContainer } from '../styles/SharedPageStyles';
 import AppLayout from '../components/AppLayout';
+import { formatINR } from '../utils/currency';
+import { loadRazorpay } from '../utils/loadRazorpay'; 
 
 const Checkout = () => {
   const { axiosInstance, user } = useContext(AuthContext);
@@ -20,6 +22,7 @@ const Checkout = () => {
   const [contactPhone, setContactPhone] = useState('');
 
   const [loading, setLoading] = useState(false);
+  const [useWallet, setUseWallet] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
 
   useEffect(() => {
@@ -57,18 +60,18 @@ const Checkout = () => {
     fetchCheckoutData();
   }, [axiosInstance, user, navigate]);
 
+
   const handlePlaceOrder = async () => {
     if (!selectedAddressId) return toast.error('⚠️ Please select a delivery address!');
     if (!contactPhone.trim()) return toast.error('⚠️ A contact phone number is compulsory!');
     if (cartItems.length === 0) return toast.error('⚠️ Your cart is empty!');
-  
-    // Safety check to ensure Razorpay script loaded successfully
-    if (typeof window.Razorpay === 'undefined') {
+
+    const isRazorpayLoaded = await loadRazorpay();
+    if (!isRazorpayLoaded) {
       toast.error('❌ Razorpay SDK failed to load. Disable adblockers for localhost.');
-      setLoading(false);
       return;
     }
-  
+    
     setLoading(true);
     try {
       const selectedAddr = addresses.find(a => a.id === selectedAddressId);
@@ -80,17 +83,32 @@ const Checkout = () => {
         price: Number(item.price),
       }));
   
-      // 1. Create the pending Django order & get Razorpay session details
       const orderRes = await axiosInstance.post('/api/orders/create-razorpay-order/', {
         shipping_address: addressSnapshot,
         contact_phone: contactPhone,
         total_price: payloadTotalPrice,
+        use_wallet: useWallet,
         order_items: payloadOrderItems,
       });
   
       const orderData = orderRes.data;
+
+      // 🚀 SCENARIO B: FULLY COVERED BY WALLET (BYPASS RAZORPAY)
+      if (orderData.payment_complete) {
+        toast.success('🎉 Order fully paid using Wallet Balance!');
+        setLoading(false);
+        navigate(`/order-success/${orderData.order_id}`, {
+          state: {
+            order: { total_price: payloadTotalPrice },
+            payment: orderData.payment,
+            userAddress: addressSnapshot,
+            userPhone: contactPhone
+          }
+        });
+        return; 
+      }
   
-      // 2. Configure Razorpay Modal Options
+      // 🚀 SCENARIO A: PARTIAL OR NO GIFT CARD (PROCEED TO RAZORPAY)
       const options = {
         key: orderData.key_id,
         amount: orderData.amount,
@@ -100,7 +118,6 @@ const Checkout = () => {
         order_id: orderData.razorpay_order_id,
         handler: async function (response) {
           try {
-            // 3. Verify payment signature & finalize payment record in backend
             const verifyRes = await axiosInstance.post('/api/orders/verify-razorpay-payment/', {
               order_id: orderData.order_id,
               razorpay_order_id: response.razorpay_order_id,
@@ -137,14 +154,12 @@ const Checkout = () => {
           color: "#0B8457"
         },
         modal: {
-          // 🚀 UPGRADE: Catch the user closing the modal abruptly and cancel the pending order
           ondismiss: async function() {
             setLoading(false);
             toast("Payment cancelled by user", { icon: '⚠️' });
             
             try {
               await axiosInstance.post(`/api/orders/${orderData.order_id}/cancel/`);
-              console.log(`Order ${orderData.order_id} cancelled due to modal dismissal.`);
             } catch (cancelErr) {
               console.error('Failed to cancel abandoned order:', cancelErr);
             }
@@ -168,6 +183,9 @@ const Checkout = () => {
   };
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.quantity * Number(item.price), 0);
+  const walletBalance = Number(user?.wallet_balance || 0);
+  const appliedWalletAmount = useWallet ? Math.min(cartTotal, walletBalance) : 0;
+  const finalTotal = Math.max(0, cartTotal - appliedWalletAmount);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -206,9 +224,9 @@ const Checkout = () => {
                 <Ring animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} />
                 <FaLock size={26} color="#0B8457" />
               </IconWrapper>
-              <h2>Authorizing Payment</h2>
-              <h4>SECURE 256-BIT ENCRYPTION</h4>
-              <p>Please do not close this window or refresh your browser while we verify your transaction.</p>
+              <h2>Processing securely...</h2>
+              <h4>256-BIT ENCRYPTION</h4>
+              <p>Please do not close this window or refresh your browser while we prepare your transaction.</p>
               <ProgressBarContainer>
                 <ProgressFill initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 2.4, ease: "easeInOut" }} />
               </ProgressBarContainer>
@@ -243,12 +261,35 @@ const Checkout = () => {
                         </ProductImage>
                         <div className="details">
                           <ProductName>{item.product_name}</ProductName>
-                          <ProductQty>Qty: {item.quantity} <span>•</span> ${Number(item.price).toFixed(2)} each</ProductQty>
+                          <ProductQty>Qty: {item.quantity} <span>•</span> {formatINR(item.price)} each</ProductQty>
                         </div>
-                        <ItemTotal>${(item.quantity * Number(item.price)).toFixed(2)}</ItemTotal>
+                        <ItemTotal>{formatINR((item.quantity * Number(item.price)))}</ItemTotal>
                       </CartItem>
                     ))}
                   </CartItems>
+                </GlassSection>
+
+                {/* 🚀 NEW: Wallet Application Section */}
+                <GlassSection variants={itemVariants}>
+                  <SectionHeader><FaGift color="#0B8457" /> EazyShop Wallet</SectionHeader>
+                  <GiftCardWrapper>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      <div>
+                        <strong style={{ display: 'block', fontSize: '1.1rem', color: '#0F172A', marginBottom: '0.3rem' }}>Available Balance: {formatINR(walletBalance)}</strong>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748B' }}>Use your unified wallet balance to pay for this order.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '0.5rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={useWallet} 
+                          onChange={(e) => setUseWallet(e.target.checked)} 
+                          disabled={walletBalance <= 0}
+                          style={{ width: '20px', height: '20px', accentColor: '#0B8457', cursor: walletBalance > 0 ? 'pointer' : 'not-allowed' }}
+                        />
+                        <span style={{ fontWeight: '700', color: walletBalance > 0 ? '#0B8457' : '#94A3B8' }}>Use Wallet</span>
+                      </label>
+                    </div>
+                  </GiftCardWrapper>
                 </GlassSection>
 
                 <GlassSection variants={itemVariants}>
@@ -300,13 +341,27 @@ const Checkout = () => {
                   </ContactInputWrapper>
                 </GlassSection>
 
+                {/* 🚀 UPGRADED: Dynamic Total Section */}
                 <TotalSection variants={itemVariants}>
-                  <div className="total-row">
+                  <SummaryRow>
+                    <span>Cart Total</span>
+                    <span>{formatINR(cartTotal)}</span>
+                  </SummaryRow>
+                  
+                  {useWallet && appliedWalletAmount > 0 && (
+                    <SummaryRow className="discount">
+                      <span>Wallet Applied</span>
+                      <span>- {formatINR(appliedWalletAmount)}</span>
+                    </SummaryRow>
+                  )}
+
+                  <div className="total-row" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
                     <span>Total to Pay</span>
-                    <TotalAmount>${cartTotal.toFixed(2)}</TotalAmount>
+                    <TotalAmount>{formatINR(finalTotal)}</TotalAmount>
                   </div>
+                  
                   <PlaceOrderButton onClick={handlePlaceOrder} disabled={loading || cartItems.length === 0 || addresses.length === 0 || !contactPhone} whileHover={{ scale: loading || cartItems.length === 0 || addresses.length === 0 || !contactPhone ? 1 : 1.02 }} whileTap={{ scale: loading || cartItems.length === 0 || addresses.length === 0 || !contactPhone ? 1 : 0.98 }}>
-                    {loading ? 'Processing...' : 'Place Secure Order'}
+                    {loading ? 'Processing...' : (finalTotal > 0 ? 'Place Secure Order' : 'Complete Order with Wallet Balance')}
                   </PlaceOrderButton>
                 </TotalSection>
               </ContentGrid>
@@ -382,6 +437,35 @@ const ItemTotal = styled.div`
   @media (max-width: 768px) { font-size: 1rem; }
 `;
 
+const GiftCardWrapper = styled.div`
+  .input-group {
+    display: flex; gap: 1rem;
+    
+    input {
+      flex: 1; padding: 1rem 1.2rem; border-radius: 12px; border: 1px solid #E2E8F0;
+      font-family: monospace; font-size: 1rem; outline: none; transition: all 0.2s; background: #ffffff; color: #0F172A;
+    }
+    input:focus { border-color: #0B8457; box-shadow: 0 0 0 3px rgba(11, 132, 87, 0.1); }
+    input:disabled { background: #F8FAFC; color: #94A3B8; }
+    
+    button { padding: 0 2rem; border-radius: 12px; font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.2s; border: none; }
+    .apply-btn { background: #0F172A; color: white; }
+    .apply-btn:hover { background: #1E293B; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2); }
+    .remove-btn { background: #FEF2F2; color: #EF4444; border: 1px solid #FECACA; }
+    .remove-btn:hover { background: #FEE2E2; }
+  }
+  
+  .applied-success {
+    display: flex; align-items: center; gap: 0.5rem; color: #059669; font-weight: 600; font-size: 0.9rem;
+    margin-top: 1rem; padding: 0.8rem 1rem; background: #ECFDF5; border-radius: 12px; border: 1px solid #A7F3D0;
+  }
+  
+  @media (max-width: 600px) {
+    .input-group { flex-direction: column; }
+    .input-group button { padding: 1rem; }
+  }
+`;
+
 const AddressGrid = styled.div`
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;
   @media (max-width: 768px) { grid-template-columns: 1fr; gap: 1rem; }
@@ -437,10 +521,15 @@ const LockedField = styled.div`
 const TotalSection = styled(GlassSection)`
   padding: 2rem;
   .total-row {
-    display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;
-    span:first-child { font-size: 1.2rem; font-weight: 700; color: #475569; }
+    display: flex; justify-content: space-between; align-items: center;
+    span:first-child { font-size: 1.2rem; font-weight: 800; color: #0F172A; }
   }
   @media (max-width: 768px) { padding: 1.5rem 1rem; }
+`;
+
+const SummaryRow = styled.div`
+  display: flex; justify-content: space-between; margin-bottom: 0.8rem; color: #64748B; font-weight: 600; font-size: 1.05rem;
+  &.discount { color: #059669; font-weight: 700; }
 `;
 
 const TotalAmount = styled.div`
@@ -451,7 +540,7 @@ const TotalAmount = styled.div`
 const PlaceOrderButton = styled(motion.button)`
   width: 100%; padding: 1.2rem; background: linear-gradient(135deg, #0B8457 0%, #075E3E 100%);
   color: #ffffff; border: none; border-radius: 16px; font-weight: 800; font-size: 1.15rem; cursor: pointer;
-  box-shadow: 0 6px 20px rgba(11, 132, 87, 0.25); transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(11, 132, 87, 0.25); transition: all 0.3s ease; margin-top: 1.5rem;
   &:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(11, 132, 87, 0.4); }
   &:disabled { background: #CBD5E1; box-shadow: none; cursor: not-allowed; }
 `;
