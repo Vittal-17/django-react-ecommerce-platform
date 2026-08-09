@@ -45,7 +45,7 @@ const SecureProcessingOverlay = ({ isVisible, mode }) => {
 };
 
 const ProfileSection = ({ addresses, setAddresses }) => {
-  const { user, setUser, axiosInstance } = useContext(AuthContext); 
+  const { user, setUser, axiosInstance, syncWalletBalance } = useContext(AuthContext);
   const [localPhone, setLocalPhone] = useState('');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [giftCards, setGiftCards] = useState([]);
@@ -115,7 +115,11 @@ const ProfileSection = ({ addresses, setAddresses }) => {
         const newBalance = userRes.data.wallet_balance;
         
         // Update global context and local storage so the UI updates instantly
-        if (setUser) {
+        if (syncWalletBalance) {
+          syncWalletBalance(user.id, newBalance);
+          const updatedUser = { ...user, wallet_balance: newBalance };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        } else if (setUser) {
           setUser(prev => {
             const updatedUser = { ...prev, wallet_balance: newBalance };
             localStorage.setItem('user', JSON.stringify(updatedUser));

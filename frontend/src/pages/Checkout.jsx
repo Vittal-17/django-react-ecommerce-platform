@@ -117,13 +117,26 @@ const Checkout = () => {
         description: "Secure Order Checkout",
         order_id: orderData.razorpay_order_id,
         handler: async function (response) {
+          let timeoutHandle;
+          
+          // 45-Second Safety Timeout Guard
+          const safetyTimeout = new Promise((_, reject) => {
+              timeoutHandle = setTimeout(() => {
+                  reject(new Error("Gateway response timed out. Please check your order history."));
+              }, 45000);
+          });
+          
           try {
-            const verifyRes = await axiosInstance.post('/api/orders/verify-razorpay-payment/', {
+            const verifyCall = axiosInstance.post('/api/orders/verify-razorpay-payment/', {
               order_id: orderData.order_id,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             });
+  
+            // Race the API call against the timeout
+            const verifyRes = await Promise.race([verifyCall, safetyTimeout]);
+            clearTimeout(timeoutHandle);
   
             if (verifyRes.data.success) {
               toast.success('📦 Payment verified & Order placed successfully!');
@@ -140,8 +153,9 @@ const Checkout = () => {
               setLoading(false);
             }
           } catch (err) {
+            clearTimeout(timeoutHandle);
             console.error('Verification error:', err);
-            toast.error('❌ Error verifying payment with server');
+            toast.error(err.message || '❌ Error verifying payment with server');
             setLoading(false);
           }
         },

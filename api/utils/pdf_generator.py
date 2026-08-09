@@ -1,4 +1,7 @@
 # api/utils/pdf_generator.py
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import hashlib
 import requests
@@ -79,7 +82,7 @@ def get_product_image(item):
                         f.write(response.content)
                     return RLImage(cached_file_path, width=32, height=32)
     except Exception as e:
-        print(f"[PDF IMAGE ERROR] {e}")
+        logger.error(f"[PDF IMAGE ERROR] {e}")
 
     return None
 
@@ -96,7 +99,7 @@ def get_shop_logo():
         if os.path.exists(fallback_path):
             return RLImage(fallback_path, width=36, height=36)
     except Exception as e:
-        print(f"[PDF LOGO ERROR] {e}")
+        logger.error(f"[PDF LOGO ERROR] {e}")
 
     return None
 

@@ -173,7 +173,31 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
-  // 4. LOGOUT USER METHOD
+  // 4. CROSS-TAB WALLET SYNC (BroadcastChannel)
+  useEffect(() => {
+    const channel = new BroadcastChannel('eazyshop_wallet_sync');
+    channel.onmessage = (event) => {
+      if (event.data?.type === 'SYNC_WALLET') {
+        setUser((prevUser) => {
+          if (prevUser && prevUser.id === event.data.userId) {
+            return { ...prevUser, wallet_balance: event.data.newBalance };
+          }
+          return prevUser;
+        });
+      }
+    };
+    return () => channel.close();
+  }, []);
+
+  // Expose a helper to trigger the sync across tabs
+  const syncWalletBalance = (userId, newBalance) => {
+    setUser((prev) => ({ ...prev, wallet_balance: newBalance }));
+    const channel = new BroadcastChannel('eazyshop_wallet_sync');
+    channel.postMessage({ type: 'SYNC_WALLET', userId, newBalance });
+    channel.close();
+  };
+
+  // 5. LOGOUT USER METHOD
   const logoutUser = async () => {
     try {
       // Notify backend to clear HTTP-Only cookies
@@ -188,7 +212,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loginUser, logoutUser, axiosInstance }}>
+    <AuthContext.Provider value={{ user, loginUser, logoutUser, axiosInstance, syncWalletBalance }}>
       {!loading && children}
     </AuthContext.Provider>
   );

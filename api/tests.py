@@ -640,3 +640,127 @@ class EazyShopTitaniumTestSuite(APITestCase):
         response = self.client.get(f'/api/orders/{order.id}/invoice/')
 
         self.assertIn(response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND])
+
+    # ==========================================
+    # PHASE 16: UNIFIED WALLET & SPLIT-PAYMENTS
+    # ==========================================
+    @patch('api.views.OrderViewSet.send_order_status_email')
+    @patch('razorpay.Client')
+    def test_63_wallet_fully_covers_order(self, MockRazorpayClient, MockEmail):
+        from decimal import Decimal
+        self.customer.wallet_balance = Decimal('5000.00')
+        self.customer.save()
+        
+        CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
+        self.client.force_authenticate(user=self.customer)
+        
+        payload = {
+            "shipping_address": "123 Main St",
+            "contact_phone": "9999999999",
+            "total_price": "1000.00",
+            "use_wallet": True,
+            "order_items": [{"product": self.product.id, "quantity": 1, "price": "1000.00"}]
+        }
+        response = self.client.post(self.order_url + 'create-razorpay-order/', payload, format='json')
+        
+        # Order should instantly complete without reaching Razorpay
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.wallet_balance, Decimal('4000.00'))
+        
+    @patch('api.views.OrderViewSet.send_order_status_email')
+    @patch('razorpay.Client')
+    def test_64_wallet_split_payment_with_razorpay(self, MockRazorpayClient, MockEmail):
+        from decimal import Decimal
+        self.customer.wallet_balance = Decimal('400.00')
+        self.customer.save()
+        
+        CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
+        order = Order.objects.create(user=self.customer, total_price=1000, status='pending')
+        
+        mock_client = MockRazorpayClient.return_value
+        mock_client.utility.verify_payment_signature.return_value = None
+        # Mocking the Razorpay notes payload holding the split deduction
+        mock_client.payment.fetch.return_value = {
+            'method': 'upi',
+            'notes': {'wallet_deducted': '400.00'}
+        }
+        
+        self.client.force_authenticate(user=self.customer)
+        payload = {
+            "order_id": order.id,
+            "razorpay_order_id": "order_rzp123",
+            "razorpay_payment_id": "pay_rzp123",
+            "razorpay_signature": "valid_signature_hash"
+        }
+        response = self.client.post(self.order_url + 'verify-razorpay-payment/', payload, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.wallet_balance, Decimal('0.00'))
+        
+    @patch('razorpay.Client')
+    def test_65_wallet_split_insufficient_balance_fails_gracefully(self, MockRazorpayClient):
+        from decimal import Decimal
+        self.customer.wallet_balance = Decimal('100.00') # Less than the 400 requested deduction
+        self.customer.save()
+        
+        order = Order.objects.create(user=self.customer, total_price=1000, status='pending')
+        
+        mock_client = MockRazorpayClient.return_value
+        mock_client.utility.verify_payment_signature.return_value = None
+        mock_client.payment.fetch.return_value = {
+            'method': 'upi',
+            'notes': {'wallet_deducted': '400.00'}
+        }
+        
+        self.client.force_authenticate(user=self.customer)
+        payload = {
+            "order_id": order.id,
+            "razorpay_order_id": "order_rzp123",
+            "razorpay_payment_id": "pay_rzp123",
+            "razorpay_signature": "valid_signature_hash"
+        }
+        response = self.client.post(self.order_url + 'verify-razorpay-payment/', payload, format='json')
+        
+        # Due to our concurrency patch, this should fail and rollback
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Insufficient wallet balance', response.data['message'])
+
+    # ==========================================
+    # PHASE 17: GIFT CARDS & REDEMPTION SECURITY
+    # ==========================================
+    def test_66_redeem_gift_card_atomically_adds_balance_and_locks(self):
+        from decimal import Decimal
+        from api.models import GiftCard
+        gc = GiftCard.objects.create(code="TEST100", initial_balance=Decimal('100.00'), current_balance=Decimal('100.00'), is_active=True, owner=None)
+        
+        self.customer.wallet_balance = Decimal('0.00')
+        self.customer.save()
+        
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post('/api/gift-cards/redeem/', {'gift_card_id': gc.id}, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.wallet_balance, Decimal('100.00'))
+        
+        gc.refresh_from_db()
+        self.assertFalse(gc.is_active)
+        self.assertEqual(gc.current_balance, Decimal('0.00'))
+        self.assertEqual(gc.owner, self.customer)
+        
+    def test_67_idor_prevented_on_gift_card_check(self):
+        from decimal import Decimal
+        from api.models import GiftCard
+        # Simulating a gift card owned by someone else
+        gc = GiftCard.objects.create(code="STOLEN100", initial_balance=Decimal('100.00'), current_balance=Decimal('100.00'), is_active=True, owner=self.admin)
+        
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post('/api/gift-cards/check/', {'gift_card_id': gc.id}, format='json')
+        
+        # IDOR Patch prevents access
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 from api.utils.currency_format import format_inr
 # email_service.py
 import sys
@@ -27,10 +30,10 @@ def _send_html_email(to_email, subject, html_content):
         msg.attach_alternative(html_content, "text/html")
         msg.send()
         
-        print(f"[EMAIL LOG] ✅ Sent to {to_email} | Subject: {subject}")
+        logger.info(f"[EMAIL LOG] ✅ Sent to {to_email} | Subject: {subject}")
         return True
     except Exception as e:
-        print(f"[EMAIL ERROR] ❌ Anymail API failed: {e!s}")
+        logger.error(f"[EMAIL ERROR] ❌ Anymail API failed: {e!s}")
         return False
 
 def get_base_template(header_color, header_title, icon, body_html):
@@ -279,13 +282,13 @@ def _safe_async_dispatch(target_func, *args, **kwargs):
         try:
             target_func(*args, **kwargs)
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
+            logger.error(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
     if 'test' in sys.argv:
         try:
             target_func(*args, **kwargs)
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
+            logger.error(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
     else:
         threading.Thread(target=wrapper).start()
 
@@ -319,7 +322,7 @@ def async_notify_vendors(order):
                     address=shipping_address
                 )
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Failed to notify vendor {vendor_email}: {e}")
+                logger.error(f"[EMAIL ERROR] ❌ Failed to notify vendor {vendor_email}: {e}")
 
     _safe_async_dispatch(send_emails)
 
@@ -351,7 +354,7 @@ def async_notify_customer_status(item):
                 address=address
             )
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Failed to notify customer: {e!s}")
+            logger.error(f"[EMAIL ERROR] ❌ Failed to notify customer: {e!s}")
 
     _safe_async_dispatch(send_email)
 
@@ -389,6 +392,6 @@ def async_notify_cancellation(order):
                 html = get_base_template("#E11D48", "Order Cancelled", "❌", body)
                 _send_html_email(vendor_email, subject, html)
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Threaded email failed for order #{order_id}: {e!s}")
+                logger.error(f"[EMAIL ERROR] ❌ Threaded email failed for order #{order_id}: {e!s}")
 
     _safe_async_dispatch(send_cancellation_emails)

@@ -1,4 +1,7 @@
 # views.py
+import logging
+logger = logging.getLogger(__name__)
+
 import random
 import threading
 import time
@@ -165,7 +168,7 @@ class UserViewSet(viewsets.ModelViewSet):
             send_otp_email(to_email=user.email, username=user.username, otp=otp)
             return Response({"message": f"OTP sent to {user.email}"}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(f"\n[OTP EMAIL ERROR] ❌ {e!s}\n")
+            logger.error(f"\n[OTP EMAIL ERROR] ❌ {e!s}\n")
             cache.delete(cooldown_key)
             return Response({"error": "Failed to send email. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -498,7 +501,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 address=order.shipping_address or 'Saved Address'
             )
         except Exception as e:
-            print(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
+            logger.error(f"[EMAIL ERROR] ❌ Threaded email failed: {e!s}")
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -925,7 +928,7 @@ class VendorSalesViewSet(viewsets.ReadOnlyModelViewSet):
                     address=order.shipping_address or 'Saved Address'
                 )
             except Exception as e:
-                print(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {e!s}")
+                logger.error(f"[EMAIL ERROR] ❌ Failed to notify customer about item {item.id} status: {e!s}")
 
         threading.Thread(target=send_email).start()
 
@@ -999,7 +1002,7 @@ class ConfirmPasswordResetView(APIView):
                 if not user:
                     return Response({"error": "User not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-                print(f"[DEBUG] Updating password for user ID: {user.pk} ({user.email})")
+                logger.debug(f"[DEBUG] Updating password for user ID: {user.pk} ({user.email})")
                 user.set_password(new_password)
 
                 # Explicitly specify update_fields to force an immediate SQL UPDATE
@@ -1007,14 +1010,14 @@ class ConfirmPasswordResetView(APIView):
 
                 # Force refresh from database to confirm the hash changed in storage
                 user.refresh_from_db()
-                print(f"[DEBUG] Successfully committed new hash to DB. Current hash starts with: {user.password[:15]}...")
+                logger.debug(f"[DEBUG] Successfully committed new hash to DB. Current hash starts with: {user.password[:15]}...")
 
             # Cache is wiped only after successful transaction commit
             cache.delete(f"pwd_reset_{email}")
             return Response({"detail": "Password reset successfully."}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            print(f"[ERROR] Database save failed: {e}")
+            logger.error(f"[ERROR] Database save failed: {e}")
             return Response({"error": "Internal database error during password reset."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1038,7 +1041,7 @@ class DownloadInvoiceView(APIView):
         except Order.DoesNotExist:
             return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print(f"[PDF ERROR] {e}")
+            logger.error(f"[PDF ERROR] {e}")
             return Response({"error": "Failed to generate invoice PDF."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
