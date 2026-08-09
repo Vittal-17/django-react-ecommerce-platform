@@ -1256,7 +1256,10 @@ class GiftCardRedeemView(APIView):
                         user=user
                     )
                     
-                    return Response({'message': f'Successfully added {amount_to_add} to wallet balance.'}, status=status.HTTP_200_OK)
+                    return Response({
+                        'message': f'Successfully added {amount_to_add} to wallet balance.',
+                        'new_balance': str(user.wallet_balance)
+                    }, status=status.HTTP_200_OK)
                 else:
                     return Response({'error': 'Gift card has zero balance.'}, status=status.HTTP_400_BAD_REQUEST)
         except GiftCard.DoesNotExist:

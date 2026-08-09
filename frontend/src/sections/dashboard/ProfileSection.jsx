@@ -103,16 +103,13 @@ const ProfileSection = ({ addresses, setAddresses }) => {
       }
       setIsClaiming(true);
       try {
-        await axiosInstance.post('/api/gift-cards/redeem/', { gift_card_id: claimId.trim() });
+        const res = await axiosInstance.post('/api/gift-cards/redeem/', { gift_card_id: claimId.trim() });
         
-        // Fetch the updated gift cards AND the new user wallet balance
-        const [gcRes, userRes] = await Promise.all([
-          axiosInstance.get('/api/gift-cards/'),
-          axiosInstance.get(`/api/users/${user.id}/`)
-        ]);
-        
+        // Fetch the updated gift cards only, new balance comes from the redeem response
+        const gcRes = await axiosInstance.get('/api/gift-cards/');
         setGiftCards(gcRes.data);
-        const newBalance = userRes.data.wallet_balance;
+        
+        const newBalance = res.data.new_balance;
         
         // Update global context and local storage so the UI updates instantly
         if (syncWalletBalance) {
