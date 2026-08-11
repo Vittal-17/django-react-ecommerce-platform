@@ -12,7 +12,7 @@ import AppLayout from '../components/AppLayout';
 const PRESET_AMOUNTS = [500, 1000, 2000, 5000];
 
 const GiftCards = () => {
-    const { axiosInstance, user, setUser } = useContext(AuthContext); 
+    const { axiosInstance, user, setUser, syncWalletBalance } = useContext(AuthContext); 
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
@@ -81,14 +81,13 @@ const GiftCards = () => {
     const handleInstantRedeem = async () => {
         setIsRedeeming(true);
         try {
-            await axiosInstance.post('/api/gift-cards/redeem/', { gift_card_id: giftCard.gift_card_id });
-            
-            // Fetch updated user profile to get the exact fresh wallet balance
-            const userRes = await axiosInstance.get(`/api/users/${user.id}/`);
-            const newBalance = userRes.data.wallet_balance;
+            const res = await axiosInstance.post('/api/gift-cards/redeem/', { gift_card_id: giftCard.gift_card_id });
+            const newBalance = res.data.new_balance;
 
             // Sync global state instantly
-            if (setUser) {
+            if (syncWalletBalance) {
+                syncWalletBalance(user.id, newBalance);
+            } else if (setUser) {
                 setUser(prev => {
                     const updatedUser = { ...prev, wallet_balance: newBalance };
                     localStorage.setItem('user', JSON.stringify(updatedUser));
