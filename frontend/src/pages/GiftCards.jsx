@@ -1,6 +1,6 @@
 // src/pages/GiftCards.jsx
 import React, { useState, useContext } from 'react';
-import AuthContext from '../context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaGift, FaCheckCircle, FaRupeeSign, FaCopy, FaShieldAlt, FaWallet } from 'react-icons/fa';
@@ -12,7 +12,7 @@ import AppLayout from '../components/AppLayout';
 const PRESET_AMOUNTS = [500, 1000, 2000, 5000];
 
 const GiftCards = () => {
-    const { axiosInstance, user, setUser, syncWalletBalance } = useContext(AuthContext); 
+    const { axiosInstance, user, setUser, syncWalletBalance, refreshUser } = useContext(AuthContext); 
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
@@ -77,25 +77,30 @@ const GiftCards = () => {
         }
     };
 
-    // 🚀 NEW: Instant Redeem Logic
+    // 🚀 UPGRADED: Instant Redeem Logic with Robust Production State Synchronization
     const handleInstantRedeem = async () => {
         setIsRedeeming(true);
         try {
             const res = await axiosInstance.post('/api/gift-cards/redeem/', { gift_card_id: giftCard.gift_card_id });
             const newBalance = res.data.new_balance;
 
-            // Sync global state instantly
-            if (syncWalletBalance) {
+            // 1. Instantly sync state across context and broadcast to other tabs
+            if (syncWalletBalance && user) {
                 syncWalletBalance(user.id, newBalance);
-            } else if (setUser) {
+            } else if (setUser && user) {
                 setUser(prev => {
                     const updatedUser = { ...prev, wallet_balance: newBalance };
                     localStorage.setItem('user', JSON.stringify(updatedUser));
                     return updatedUser;
                 });
             }
+
+            // 2. Guarantee fresh DB sync on production environments
+            if (typeof refreshUser === 'function') {
+                await refreshUser();
+            }
             
-            // Trigger the success modal
+            // 3. Trigger the success modal
             setRedeemedBalance(newBalance);
         } catch (err) {
             toast.error(err.response?.data?.error || 'Failed to redeem gift card');
@@ -116,7 +121,7 @@ const GiftCards = () => {
             <GreenOrbTop />
             <GreenOrbBottom />
 
-            {/* 🚀 NEW: Gorgeous Redeem Success Modal */}
+            {/* 🚀 Gorgeous Redeem Success Modal */}
             <AnimatePresence>
                 {redeemedBalance !== null && (
                     <Overlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -219,7 +224,6 @@ const GiftCards = () => {
                                 )}
                             </PhysicalCardMockup>
 
-                            {/* 🚀 NEW: Dual Action Buttons */}
                             <ButtonGroup>
                                 <PrimaryButton onClick={handleInstantRedeem} disabled={isRedeeming}>
                                     <FaWallet style={{ marginRight: '8px' }} />
@@ -484,7 +488,6 @@ const CustomInput = styled.input`
         box-shadow: 0 0 0 4px rgba(11, 132, 87, 0.1);
     }
 
-    /* Remove number arrows */
     &::-webkit-outer-spin-button,
     &::-webkit-inner-spin-button {
         -webkit-appearance: none;
